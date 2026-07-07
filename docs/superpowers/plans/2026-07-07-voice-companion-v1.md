@@ -6,7 +6,7 @@
 
 **Architecture:** A blocking main loop wires five components together: a VAD-based `VoiceDetector` captures one spoken utterance at a time from the mic, a `Transcriber` (faster-whisper) converts it to text, a `StateMachine` decides whether that text is a control phrase or content to forward, an `LLMClient` (Ollama) generates replies for forwarded content, and a `Speaker` (Piper) speaks replies aloud. Each component is a small class with one job, independently unit-testable via mocking except where noted.
 
-**Tech Stack:** Python 3.11+, faster-whisper (STT), Ollama Python client + `llama3.1:8b` (LLM), piper-tts (TTS), webrtcvad + sounddevice (mic capture/VAD), pytest (tests).
+**Tech Stack:** Python 3.11+, faster-whisper (STT), Ollama Python client + `llama3.1:8b` (LLM), piper-tts (TTS), webrtcvad (installed as `webrtcvad-wheels`) + sounddevice (mic capture/VAD), pytest (tests).
 
 ## Global Constraints
 
@@ -36,13 +36,13 @@
 faster-whisper>=1.0,<2
 ollama>=0.4,<1
 piper-tts>=1.3,<2
-webrtcvad>=2.0,<3
+webrtcvad-wheels>=2.0,<3
 sounddevice>=0.4,<1
 numpy>=1.24,<3
 pytest>=8,<9
 ```
 
-(Major versions are pinned because the code samples in this plan target these APIs — piper-tts in particular changed its Python API completely between 0.x and 1.x.)
+(Major versions are pinned because the code samples in this plan target these APIs — piper-tts in particular changed its Python API completely between 0.x and 1.x. `webrtcvad-wheels` is the original `webrtcvad` library republished with prebuilt Windows/macOS/Linux wheels — plain `webrtcvad` has no Windows wheel and demands a C++ compiler to install. The import name is still `import webrtcvad`.)
 
 - [ ] **Step 2: Create `companion/__init__.py` and `tests/__init__.py`** (both empty files, make each directory an importable package)
 
