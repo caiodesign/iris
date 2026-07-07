@@ -10,6 +10,7 @@ A locally-run, hands-free voice companion for English practice. It listens conti
 - Says "Hey Chat" → app wakes up and starts a spoken conversation.
 - Assistant asks what the user wants to focus on today (open question, not a fixed menu) and adapts accordingly.
 - User converses naturally by voice; assistant replies naturally by voice.
+- Says "Cancel That" → app discards what the user just said, does not send it to the LLM, and keeps listening.
 - Says "Bye Bye" → app ends the session and returns to sleep, still running and listening for "Hey Chat" again.
 - User closes the terminal window to fully exit.
 
@@ -26,6 +27,7 @@ Five components, each with one job:
 3. **State Check** — plain application logic (not AI) that inspects the transcribed text:
    - If state is **Asleep** and text contains "hey chat" → transition to **Active**, greet the user, ask what they want to focus on.
    - If state is **Active** and text contains "bye bye" → transition to **Asleep**, stop sending anything further to the LLM.
+   - If state is **Active** and text contains "cancel that" → discard the utterance entirely, stay in **Active**, do not forward anything to the LLM.
    - If state is **Active** and text is anything else → forward to the LLM.
    - If state is **Asleep** and text doesn't contain "hey chat" → discard, do nothing.
 4. **LLM (Llama 3.1 8B via Ollama)** — generates the conversational reply. Runs locally.
@@ -38,7 +40,7 @@ The application itself is the glue code wiring these five pieces together — no
 Two states only in v1:
 
 - **Asleep** — Voice Detector + STT active; only checks for "hey chat"; nothing reaches the LLM.
-- **Active** — STT output goes to the LLM (unless it's "bye bye"); LLM replies are spoken via TTS.
+- **Active** — STT output goes to the LLM, except: "bye bye" ends the session (→ Asleep), and "cancel that" discards the utterance and stays Active. Everything else is forwarded to the LLM, and replies are spoken via TTS.
 
 No pause/interrupt state in v1 (see Out of Scope — barge-in).
 
@@ -48,8 +50,11 @@ No pause/interrupt state in v1 (see Out of Scope — barge-in).
 |---|---|
 | "Hey Chat" | Wakes the app, starts a conversation (Asleep → Active) |
 | "Bye Bye" | Ends the conversation, returns to sleep (Active → Asleep) |
+| "Cancel That" | Discards what the user just said, stays Active, waits for the next thing they say |
 
 Chosen to be distinctive multi-word phrases unlikely to occur naturally during English-practice conversation, reducing false triggers.
+
+"Cancel That" is included in v1 (unlike the deferred "Enough" barge-in feature) because it reuses the exact same text-matching mechanism as "Hey Chat"/"Bye Bye" — it only needs to be checked for in already-transcribed text, with no need to detect speech while the assistant's own audio is playing, so it adds no real architectural complexity.
 
 ## Conversation Focus Selection
 
@@ -98,8 +103,8 @@ At the start of each Active session, the assistant asks an open-ended question (
 
 ## Testing Approach
 
-- **State machine logic** (Asleep/Active transitions, wake/stop phrase matching): unit-testable in isolation from audio — feed known transcript strings in, assert resulting state and whether the LLM would be called.
-- **Full pipeline (audio in → audio out):** manual end-to-end testing, since real microphone/speaker behavior isn't practically unit-testable. Verify: wake phrase reliably wakes it, normal conversation flows, stop phrase reliably ends it, false triggers are rare during normal English-practice speech.
+- **State machine logic** (Asleep/Active transitions, wake/stop/cancel phrase matching): unit-testable in isolation from audio — feed known transcript strings in, assert resulting state and whether the LLM would be called.
+- **Full pipeline (audio in → audio out):** manual end-to-end testing, since real microphone/speaker behavior isn't practically unit-testable. Verify: wake phrase reliably wakes it, normal conversation flows, cancel phrase discards without an LLM call, stop phrase reliably ends it, false triggers are rare during normal English-practice speech.
 
 ## Out of Scope for v1 (Summary)
 
