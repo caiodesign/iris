@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Control phrases (case-insensitive substring match), exactly as specified: wake = `"hey chat"`, cancel = `"cancel that"`, stop = `"bye bye"`.
+- Control phrases (case- and punctuation-insensitive substring match — transcripts are lowercased and stripped of punctuation before matching, so Whisper's "Hey, Chat!" still matches), exactly as specified: wake = `"hey chat"`, cancel = `"cancel that"`, stop = `"bye bye"`.
 - LLM: Ollama running model `llama3.1:8b`.
 - Runtime: manually launched from a terminal window; no background/tray mode; exits when the window is closed.
 - No pronunciation feedback, no barge-in/interrupt-while-speaking, no `memory.md` read/write in v1 (per spec, deferred).
@@ -28,19 +28,21 @@
 - Create: `tests/__init__.py`
 
 **Interfaces:**
-- Produces: module `companion.config` with constants `WAKE_PHRASE`, `CANCEL_PHRASE`, `STOP_PHRASE`, `OLLAMA_MODEL`, `WHISPER_MODEL_SIZE`, `WHISPER_DEVICE`, `WHISPER_COMPUTE_TYPE`, `SAMPLE_RATE`, `FRAME_DURATION_MS`, `SILENCE_TIMEOUT_MS`, `VAD_AGGRESSIVENESS`, `PIPER_VOICE_PATH`, `SYSTEM_PROMPT` — consumed by every later task.
+- Produces: module `companion.config` with constants `WAKE_PHRASE`, `CANCEL_PHRASE`, `STOP_PHRASE`, `OLLAMA_MODEL`, `WHISPER_MODEL_SIZE`, `WHISPER_DEVICE`, `WHISPER_COMPUTE_TYPE`, `SAMPLE_RATE`, `FRAME_DURATION_MS`, `SILENCE_TIMEOUT_MS`, `PREROLL_MS`, `VAD_AGGRESSIVENESS`, `PIPER_VOICE_PATH`, `SYSTEM_PROMPT`, `GREETING` — consumed by every later task.
 
 - [ ] **Step 1: Create `requirements.txt`**
 
 ```
-faster-whisper
-ollama
-piper-tts
-webrtcvad
-sounddevice
-numpy
-pytest
+faster-whisper>=1.0,<2
+ollama>=0.4,<1
+piper-tts>=1.3,<2
+webrtcvad>=2.0,<3
+sounddevice>=0.4,<1
+numpy>=1.24,<3
+pytest>=8,<9
 ```
+
+(Major versions are pinned because the code samples in this plan target these APIs — piper-tts in particular changed its Python API completely between 0.x and 1.x.)
 
 - [ ] **Step 2: Create `companion/__init__.py` and `tests/__init__.py`** (both empty files, make each directory an importable package)
 
@@ -60,9 +62,12 @@ WHISPER_COMPUTE_TYPE = "float16"
 SAMPLE_RATE = 16000
 FRAME_DURATION_MS = 30
 SILENCE_TIMEOUT_MS = 800
+PREROLL_MS = 300
 VAD_AGGRESSIVENESS = 2
 
 PIPER_VOICE_PATH = "en_US-lessac-medium.onnx"
+
+GREETING = "Hi! What would you like to work on today?"
 
 SYSTEM_PROMPT = (
     "You are a friendly, encouraging English conversation companion helping "
@@ -94,14 +99,28 @@ session.
    ```
    pip install -r requirements.txt
    ```
-3. Download a Piper voice (run from the project root, so the file lands here):
+3. Install the NVIDIA libraries faster-whisper needs to run on the GPU
+   (plain `pip install faster-whisper` does NOT include them):
+   ```
+   pip install nvidia-cublas-cu12 nvidia-cudnn-cu12
+   ```
+   If the app still fails at startup with a CUDA/cuDNN error, open
+   `companion/config.py` and set `WHISPER_DEVICE = "cpu"` and
+   `WHISPER_COMPUTE_TYPE = "int8"` — slower, but always works.
+4. Download a Piper voice (run from the project root, so the file lands here):
    ```
    python -m piper.download_voices en_US-lessac-medium
    ```
-4. Run it:
+5. Run it:
    ```
    python -m companion.main
    ```
+
+## Usage notes
+
+- Say "Cancel That" **in the same breath** as the sentence you want to
+  retract (e.g., "I went to... cancel that"). Once you pause, the app has
+  already sent what you said to the model and a reply is on its way.
 ```
 
 - [ ] **Step 5: Verify the package imports**
@@ -160,6 +179,31 @@ def test_wake_detection_is_case_insensitive():
     assert action == Action.WAKE
 
 
+def test_wake_detection_survives_whisper_punctuation():
+    # Whisper routinely returns "Hey, Chat!" — a raw substring check on
+    # "hey chat" would miss it because of the comma.
+    machine = StateMachine()
+    action = machine.process("Hey, Chat!")
+    assert action == Action.WAKE
+    assert machine.state == State.ACTIVE
+
+
+def test_stop_detection_survives_hyphenation():
+    # Whisper routinely returns "Bye-bye!" for a spoken "bye bye".
+    machine = StateMachine()
+    machine.process("hey chat")
+    action = machine.process("Bye-bye!")
+    assert action == Action.SLEEP
+    assert machine.state == State.ASLEEP
+
+
+def test_cancel_detection_survives_punctuation():
+    machine = StateMachine()
+    machine.process("hey chat")
+    action = machine.process("I went to the store, cancel that!")
+    assert action == Action.CANCEL
+
+
 def test_active_forwards_normal_speech():
     machine = StateMachine()
     machine.process("hey chat")
@@ -203,6 +247,7 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'companion.state_machi
 
 ```python
 # companion/state_machine.py
+import re
 from enum import Enum, auto
 
 from companion.config import CANCEL_PHRASE, STOP_PHRASE, WAKE_PHRASE
@@ -221,12 +266,18 @@ class Action(Enum):
     FORWARD = auto()
 
 
+def _normalize(text: str) -> str:
+    """Lowercase and strip punctuation so Whisper's "Hey, Chat!" or
+    "Bye-bye!" still match the plain control phrases."""
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+
 class StateMachine:
     def __init__(self):
         self.state = State.ASLEEP
 
     def process(self, text: str) -> Action:
-        normalized = text.lower()
+        normalized = _normalize(text)
 
         if self.state == State.ASLEEP:
             if WAKE_PHRASE in normalized:
@@ -245,7 +296,7 @@ class StateMachine:
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `pytest tests/test_state_machine.py -v`
-Expected: PASS (8 passed)
+Expected: PASS (11 passed)
 
 - [ ] **Step 5: Commit**
 
@@ -346,7 +397,7 @@ git commit -m "feat: add faster-whisper transcriber wrapper"
 
 **Interfaces:**
 - Consumes: `companion.config.OLLAMA_MODEL`, `SYSTEM_PROMPT`.
-- Produces: `LLMClient` class with `__init__(self, model: str, system_prompt: str)`, `.send(user_text: str) -> str`, `.reset(self) -> None` — consumed by Task 7 (main loop).
+- Produces: `LLMClient` class with `__init__(self, model: str, system_prompt: str)`, `.send(user_text: str) -> str`, `.reset(self) -> None`, `.seed_assistant(text: str) -> None` — consumed by Task 7 (main loop). `seed_assistant` exists because the app speaks a hardcoded greeting on wake; without recording that greeting in the history as an assistant turn, the LLM doesn't know it was said and would redundantly re-ask the same opening question.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -393,6 +444,19 @@ def test_reset_clears_history_back_to_system_prompt():
         client.reset()
 
     assert client.history == [{"role": "system", "content": "system prompt"}]
+
+
+def test_seed_assistant_records_greeting_without_calling_ollama():
+    client = LLMClient("llama3.1:8b", "system prompt")
+    client.seed_assistant("Hi! What would you like to work on today?")
+
+    assert client.history == [
+        {"role": "system", "content": "system prompt"},
+        {
+            "role": "assistant",
+            "content": "Hi! What would you like to work on today?",
+        },
+    ]
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -422,12 +486,15 @@ class LLMClient:
 
     def reset(self) -> None:
         self.history = [{"role": "system", "content": self.system_prompt}]
+
+    def seed_assistant(self, text: str) -> None:
+        self.history.append({"role": "assistant", "content": text})
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `pytest tests/test_llm_client.py -v`
-Expected: PASS (3 passed)
+Expected: PASS (4 passed)
 
 - [ ] **Step 5: Commit**
 
@@ -539,8 +606,8 @@ git commit -m "feat: add Piper text-to-speech speaker wrapper"
 - Create: `companion/voice_detector.py`
 
 **Interfaces:**
-- Consumes: `companion.config.SAMPLE_RATE`, `FRAME_DURATION_MS`, `SILENCE_TIMEOUT_MS`, `VAD_AGGRESSIVENESS`.
-- Produces: `VoiceDetector` class with `__init__(self, sample_rate, frame_duration_ms, silence_timeout_ms, vad_aggressiveness)` and `.listen_for_utterance(self) -> np.ndarray` (blocks until one utterance is captured, returns mono float32 audio normalized to [-1, 1]) — consumed by Task 7 (main loop).
+- Consumes: `companion.config.SAMPLE_RATE`, `FRAME_DURATION_MS`, `SILENCE_TIMEOUT_MS`, `PREROLL_MS`, `VAD_AGGRESSIVENESS`.
+- Produces: `VoiceDetector` class with `__init__(self, sample_rate, frame_duration_ms, silence_timeout_ms, preroll_ms, vad_aggressiveness)` and `.listen_for_utterance(self) -> np.ndarray` (blocks until one utterance is captured, returns mono float32 audio normalized to [-1, 1]) — consumed by Task 7 (main loop). The pre-roll ring buffer keeps the last `preroll_ms` of audio from *before* the VAD triggers and prepends it to the captured utterance — without it, the first syllable gets clipped and "hey chat" arrives at Whisper as "ey chat", which breaks wake detection.
 
 **No automated test for this task.** This class does real microphone I/O via `sounddevice.InputStream`, which requires physical audio hardware and produces no meaningful assertion when mocked beyond "the mock was called" — the spec's own Testing Approach section already designates the full audio pipeline for manual verification rather than unit tests. This task is verified manually in Task 7's end-to-end check instead.
 
@@ -548,6 +615,8 @@ git commit -m "feat: add Piper text-to-speech speaker wrapper"
 
 ```python
 # companion/voice_detector.py
+import collections
+
 import numpy as np
 import sounddevice as sd
 import webrtcvad
@@ -559,15 +628,20 @@ class VoiceDetector:
         sample_rate: int,
         frame_duration_ms: int,
         silence_timeout_ms: int,
+        preroll_ms: int,
         vad_aggressiveness: int,
     ):
         self.sample_rate = sample_rate
         self.frame_size = int(sample_rate * frame_duration_ms / 1000)
         self.silence_timeout_frames = silence_timeout_ms // frame_duration_ms
+        self.preroll_frames = preroll_ms // frame_duration_ms
         self.vad = webrtcvad.Vad(vad_aggressiveness)
 
     def listen_for_utterance(self) -> np.ndarray:
         frames = []
+        # Ring buffer of the most recent pre-speech frames; prepended on
+        # trigger so the first syllable isn't clipped off the utterance.
+        preroll = collections.deque(maxlen=self.preroll_frames)
         triggered = False
         silence_count = 0
 
@@ -581,15 +655,21 @@ class VoiceDetector:
                 frame, _ = stream.read(self.frame_size)
                 is_speech = self.vad.is_speech(frame.tobytes(), self.sample_rate)
 
-                if is_speech:
+                if not triggered:
+                    if is_speech:
+                        frames.extend(preroll)
+                        frames.append(frame)
+                        triggered = True
+                    else:
+                        preroll.append(frame)
+                else:
                     frames.append(frame)
-                    triggered = True
-                    silence_count = 0
-                elif triggered:
-                    frames.append(frame)
-                    silence_count += 1
-                    if silence_count > self.silence_timeout_frames:
-                        break
+                    if is_speech:
+                        silence_count = 0
+                    else:
+                        silence_count += 1
+                        if silence_count > self.silence_timeout_frames:
+                            break
 
         audio = np.concatenate(frames, axis=0).flatten().astype(np.float32) / 32768.0
         return audio
@@ -652,6 +732,24 @@ def check_microphone_available() -> None:
         sys.exit(1)
 
 
+def load_transcriber() -> Transcriber:
+    try:
+        return Transcriber(
+            config.WHISPER_MODEL_SIZE, config.WHISPER_DEVICE, config.WHISPER_COMPUTE_TYPE
+        )
+    except Exception as exc:
+        print(
+            f"ERROR: Could not load the Whisper model on "
+            f"'{config.WHISPER_DEVICE}' ({exc})."
+        )
+        print(
+            "Hint: GPU mode needs NVIDIA libraries (see README step 3). To run "
+            'on CPU instead, set WHISPER_DEVICE = "cpu" and '
+            'WHISPER_COMPUTE_TYPE = "int8" in companion/config.py.'
+        )
+        sys.exit(1)
+
+
 def speak_safely(speaker: Speaker, text: str) -> None:
     try:
         speaker.speak(text)
@@ -669,41 +767,47 @@ def main() -> None:
         sample_rate=config.SAMPLE_RATE,
         frame_duration_ms=config.FRAME_DURATION_MS,
         silence_timeout_ms=config.SILENCE_TIMEOUT_MS,
+        preroll_ms=config.PREROLL_MS,
         vad_aggressiveness=config.VAD_AGGRESSIVENESS,
     )
-    transcriber = Transcriber(
-        config.WHISPER_MODEL_SIZE, config.WHISPER_DEVICE, config.WHISPER_COMPUTE_TYPE
-    )
+    transcriber = load_transcriber()
     llm = LLMClient(config.OLLAMA_MODEL, config.SYSTEM_PROMPT)
     speaker = Speaker(config.PIPER_VOICE_PATH)
     machine = StateMachine()
 
     print(f'Ready. Say "{config.WAKE_PHRASE}" to start.')
 
-    while True:
-        audio = detector.listen_for_utterance()
-        text = transcriber.transcribe(audio)
-        if not text:
-            continue
+    try:
+        while True:
+            audio = detector.listen_for_utterance()
+            text = transcriber.transcribe(audio)
+            if not text:
+                continue
 
-        print(f"Heard: {text}")
-        action = machine.process(text)
+            print(f"Heard: {text}")
+            action = machine.process(text)
 
-        if action == Action.IGNORE:
-            continue
-        elif action == Action.WAKE:
-            print("Waking up.")
-            speak_safely(speaker, "Hi! What would you like to work on today?")
-        elif action == Action.CANCEL:
-            print("Discarded that.")
-        elif action == Action.SLEEP:
-            print("Going back to sleep.")
-            speak_safely(speaker, "Bye for now!")
-            llm.reset()
-        elif action == Action.FORWARD:
-            reply = llm.send(text)
-            print(f"Companion: {reply}")
-            speak_safely(speaker, reply)
+            if action == Action.IGNORE:
+                continue
+            elif action == Action.WAKE:
+                print("Waking up.")
+                # Fresh history per session, and the greeting is seeded as an
+                # assistant turn — otherwise the LLM doesn't know the opening
+                # question was already asked and re-asks it.
+                llm.reset()
+                llm.seed_assistant(config.GREETING)
+                speak_safely(speaker, config.GREETING)
+            elif action == Action.CANCEL:
+                print("Discarded that.")
+            elif action == Action.SLEEP:
+                print("Going back to sleep.")
+                speak_safely(speaker, "Bye for now!")
+            elif action == Action.FORWARD:
+                reply = llm.send(text)
+                print(f"Companion: {reply}")
+                speak_safely(speaker, reply)
+    except KeyboardInterrupt:
+        print("\nExiting.")
 
 
 if __name__ == "__main__":
@@ -738,7 +842,7 @@ python -m companion.main
 Walk through the spec's v1 success criteria by voice:
 1. Say "Hey Chat" → app should greet you and ask what you want to focus on.
 2. Answer naturally (e.g., "let's just chat") → app should hold a normal spoken conversation.
-3. Say something, then add "cancel that" → app should discard it (no spoken reply, log shows "Discarded that.") and keep listening.
+3. Say a sentence ending in "cancel that" **in the same breath** (e.g., "I went to the store, cancel that") → app should discard it (no spoken reply, log shows "Discarded that.") and keep listening. Note: a standalone "cancel that" said *after* a pause cannot retract the previous utterance — that one was already sent to the LLM the moment you paused. This is expected v1 behavior, matching the spec.
 4. Say "Bye Bye" → app should say goodbye and stop responding to further speech until "Hey Chat" is said again.
 5. Confirm closing the terminal window fully exits the app.
 
