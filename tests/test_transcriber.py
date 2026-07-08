@@ -6,7 +6,12 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from companion.transcriber import LocalTranscriber, _encode_wav, make_transcriber
+from companion.transcriber import (
+    LocalTranscriber,
+    OpenAITranscriber,
+    _encode_wav,
+    make_transcriber,
+)
 
 
 def test_transcribe_joins_and_strips_segment_text():
@@ -85,9 +90,6 @@ def test_encode_wav_clips_out_of_range_samples():
     with wave.open(io.BytesIO(data), "rb") as wav:
         decoded = np.frombuffer(wav.readframes(wav.getnframes()), dtype="<i2")
     assert np.array_equal(decoded, np.array([32767, -32767], dtype="<i2"))
-
-
-from companion.transcriber import OpenAITranscriber
 
 
 def test_openai_transcriber_sends_wav_and_strips_reply():
