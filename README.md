@@ -59,6 +59,26 @@ far less on GLM-5).
    `OPENAI_MODEL`, `ZAI_MODEL`). Cloud mode never loads the llama model,
    so your GPU stays free for games (only Whisper uses ~1 GB).
 
+## Cloud ears (optional)
+
+By default the companion transcribes your speech locally with
+faster-whisper (free, private, works offline). You can instead route
+transcription to OpenAI, which recognizes accents and noisy rooms more
+accurately than local Whisper — at a small per-minute cost.
+
+1. Reuse the same `OPENAI_API_KEY` from "Cloud brains" (no extra key).
+2. Pick the ears at launch — the app shows a second menu after the brain
+   menu, or skip it with:
+   ```
+   python -m companion.main --ears openai
+   ```
+   The brain and ears are independent: `--brain local --ears openai` runs
+   the free local llama brain with cloud transcription.
+3. The model is set in `companion/config.py` (`OPENAI_TRANSCRIBE_MODEL`,
+   default `gpt-4o-transcribe`). Change it to `gpt-4o-mini-transcribe` to
+   roughly halve the cost. Ballpark at 30 min/day: about $5/month on full
+   transcribe, about $2.70/month on mini.
+
 ## Usage notes
 
 - Say "Cancel That" **in the same breath** as the sentence you want to
