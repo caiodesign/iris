@@ -1,18 +1,23 @@
 # companion/main.py
+import argparse
 import os
 import sys
 
 import numpy as np
 import ollama
 import sounddevice as sd
+from dotenv import load_dotenv
 
 from companion import config
 from companion.llm_client import LLMClient
 from companion.memory import Memory
+from companion.providers import REQUIRED_ENV, make_provider
 from companion.speaker import Speaker
 from companion.state_machine import Action, StateMachine
 from companion.transcriber import Transcriber
 from companion.voice_detector import VoiceDetector
+
+PROVIDER_NAMES = ["local", "claude", "openai", "zai"]
 
 
 def check_ollama_reachable() -> None:
@@ -21,6 +26,34 @@ def check_ollama_reachable() -> None:
     except Exception as exc:
         print(f"ERROR: Could not reach Ollama ({exc}). Is it running?")
         sys.exit(1)
+
+
+def check_api_key_available(brain: str) -> None:
+    env_var = REQUIRED_ENV[brain]
+    if not os.environ.get(env_var):
+        print(
+            f"ERROR: {env_var} is not set. Put it in a .env file at the "
+            'project root (see the README section "Cloud brains") and try again.'
+        )
+        sys.exit(1)
+
+
+def choose_brain(cli_choice) -> str:
+    if cli_choice:
+        return cli_choice
+    print("Choose a brain:")
+    for number, name in enumerate(PROVIDER_NAMES, start=1):
+        marker = " (default)" if name == config.LLM_PROVIDER else ""
+        print(f"  {number}. {name}{marker}")
+    answer = input("Number or name [Enter = default]: ").strip().lower()
+    if not answer:
+        return config.LLM_PROVIDER
+    if answer.isdigit() and 1 <= int(answer) <= len(PROVIDER_NAMES):
+        return PROVIDER_NAMES[int(answer) - 1]
+    if answer in PROVIDER_NAMES:
+        return answer
+    print(f"Unknown choice '{answer}', using {config.LLM_PROVIDER}.")
+    return config.LLM_PROVIDER
 
 
 def check_microphone_available() -> None:
@@ -77,8 +110,25 @@ def speak_safely(speaker: Speaker, text: str) -> None:
 
 
 def main() -> None:
-    print("Checking Ollama and microphone...")
-    check_ollama_reachable()
+    load_dotenv()
+    parser = argparse.ArgumentParser(description="Voice English companion")
+    parser.add_argument(
+        "--brain",
+        choices=PROVIDER_NAMES,
+        default=None,
+        help="skip the startup menu and use this provider",
+    )
+    args = parser.parse_args()
+    brain = choose_brain(args.brain)
+    print(f"Brain: {brain}")
+
+    print("Checking services and microphone...")
+    if brain == "local":
+        # Cloud brains never touch Ollama, so the llama model stays out of
+        # VRAM — that's the point of using them while gaming.
+        check_ollama_reachable()
+    else:
+        check_api_key_available(brain)
     check_microphone_available()
     check_tts_files_available()
 
@@ -91,7 +141,7 @@ def main() -> None:
         vad_aggressiveness=config.VAD_AGGRESSIVENESS,
     )
     transcriber = load_transcriber()
-    llm = LLMClient(config.OLLAMA_MODEL, config.SYSTEM_PROMPT)
+    llm = LLMClient(make_provider(brain), config.SYSTEM_PROMPT)
     memory = Memory(config.MEMORY_PATH, config.MEMORY_MAX_CHARS)
     speaker = Speaker(
         config.KOKORO_MODEL_PATH,
@@ -135,7 +185,17 @@ def main() -> None:
                     except Exception as exc:
                         print(f"WARNING: Could not save session memory ({exc}).")
             elif action == Action.FORWARD:
-                reply = llm.send(text)
+                try:
+                    reply = llm.send(text)
+                except Exception as exc:
+                    # Cloud APIs hiccup and Ollama can die mid-session; keep
+                    # the session alive. (The dangling user turn is harmless:
+                    # every provider accepts consecutive user messages.)
+                    print(f"WARNING: The brain failed to reply ({exc}).")
+                    speak_safely(
+                        speaker, "Sorry, I had trouble thinking. Say that again?"
+                    )
+                    continue
                 print(f"Companion: {reply}")
                 speak_safely(speaker, reply)
     except KeyboardInterrupt:

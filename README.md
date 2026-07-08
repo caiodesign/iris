@@ -35,6 +35,30 @@ session.
    python -m companion.main
    ```
 
+## Cloud brains (optional)
+
+By default the companion thinks with the free local llama model. You can
+also route the conversation to a cloud model — better answers (game builds,
+niche topics) and no VRAM use, but it costs real money per exchange
+(ballpark: half a cent to 2 cents per exchange on Sonnet 5 / gpt-5.4,
+far less on GLM-5).
+
+1. Create a file named `.env` in the project root (it is git-ignored):
+   ```
+   ANTHROPIC_API_KEY=sk-ant-...
+   OPENAI_API_KEY=sk-...
+   ZAI_API_KEY=...
+   ```
+   Only add the keys you have: Claude → console.anthropic.com,
+   OpenAI → platform.openai.com, z.ai → z.ai (API keys page).
+2. Pick the brain at launch — the app shows a menu, or skip it with:
+   ```
+   python -m companion.main --brain claude
+   ```
+3. Models are set in `companion/config.py` (`ANTHROPIC_MODEL`,
+   `OPENAI_MODEL`, `ZAI_MODEL`). Cloud mode never loads the llama model,
+   so your GPU stays free for games (only Whisper uses ~1 GB).
+
 ## Usage notes
 
 - Say "Cancel That" **in the same breath** as the sentence you want to

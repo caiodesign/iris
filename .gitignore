@@ -4,3 +4,4 @@ __pycache__/
 *.onnx.json
 voices-v1.0.bin
 memory.md
+.env
