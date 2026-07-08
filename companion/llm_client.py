@@ -18,8 +18,24 @@ class LLMClient:
         self.history.append({"role": "assistant", "content": reply})
         return reply
 
-    def reset(self) -> None:
-        self.history = [{"role": "system", "content": self.system_prompt}]
+    def reset(self, memory: str = "") -> None:
+        content = self.system_prompt
+        if memory:
+            content += (
+                "\n\nWhat you remember about the user from previous "
+                "sessions:\n" + memory
+            )
+        self.history = [{"role": "system", "content": content}]
+
+    def summarize(self, instruction: str) -> str:
+        # The session is over: the instruction and reply deliberately stay
+        # out of self.history — this is a side-channel request.
+        messages = list(self.history) + [{"role": "user", "content": instruction}]
+        response = ollama.chat(model=self.model, messages=messages)
+        return response["message"]["content"]
+
+    def has_user_turns(self) -> bool:
+        return any(message["role"] == "user" for message in self.history)
 
     def seed_assistant(self, text: str) -> None:
         self.history.append({"role": "assistant", "content": text})
