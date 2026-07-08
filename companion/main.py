@@ -18,6 +18,7 @@ from companion.transcriber import LocalTranscriber
 from companion.voice_detector import VoiceDetector
 
 PROVIDER_NAMES = ["local", "claude", "openai", "zai"]
+STT_NAMES = ["local", "openai"]
 
 
 def check_ollama_reachable() -> None:
@@ -38,22 +39,22 @@ def check_api_key_available(brain: str) -> None:
         sys.exit(1)
 
 
-def choose_brain(cli_choice) -> str:
+def choose_from_menu(label, names, default, cli_choice) -> str:
     if cli_choice:
         return cli_choice
-    print("Choose a brain:")
-    for number, name in enumerate(PROVIDER_NAMES, start=1):
-        marker = " (default)" if name == config.LLM_PROVIDER else ""
+    print(f"Choose {label}:")
+    for number, name in enumerate(names, start=1):
+        marker = " (default)" if name == default else ""
         print(f"  {number}. {name}{marker}")
     answer = input("Number or name [Enter = default]: ").strip().lower()
     if not answer:
-        return config.LLM_PROVIDER
-    if answer.isdigit() and 1 <= int(answer) <= len(PROVIDER_NAMES):
-        return PROVIDER_NAMES[int(answer) - 1]
-    if answer in PROVIDER_NAMES:
+        return default
+    if answer.isdigit() and 1 <= int(answer) <= len(names):
+        return names[int(answer) - 1]
+    if answer in names:
         return answer
-    print(f"Unknown choice '{answer}', using {config.LLM_PROVIDER}.")
-    return config.LLM_PROVIDER
+    print(f"Unknown choice '{answer}', using {default}.")
+    return default
 
 
 def check_microphone_available() -> None:
@@ -118,8 +119,14 @@ def main() -> None:
         default=None,
         help="skip the startup menu and use this provider",
     )
+    parser.add_argument(
+        "--ears",
+        choices=STT_NAMES,
+        default=None,
+        help="skip the ears menu and use this transcription backend",
+    )
     args = parser.parse_args()
-    brain = choose_brain(args.brain)
+    brain = choose_from_menu("brain", PROVIDER_NAMES, config.LLM_PROVIDER, args.brain)
     print(f"Brain: {brain}")
 
     print("Checking services and microphone...")

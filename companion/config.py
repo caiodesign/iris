@@ -8,6 +8,9 @@ OLLAMA_MODEL = "llama3.1:8b"
 # Pick at launch via the startup menu or --brain; this is the Enter default.
 LLM_PROVIDER = "local"
 
+# Which transcription backend ("ears"): "local" (faster-whisper) or "openai".
+STT_PROVIDER = "local"
+
 ANTHROPIC_MODEL = "claude-sonnet-5"
 OPENAI_MODEL = "gpt-5.4"
 OPENAI_TRANSCRIBE_MODEL = "gpt-4o-transcribe"  # cloud "ears"; "gpt-4o-mini-transcribe" halves cost
