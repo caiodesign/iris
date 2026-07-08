@@ -84,7 +84,12 @@ accurately than local Whisper — at a small per-minute cost.
 - Say "Cancel That" **in the same breath** as the sentence you want to
   retract (e.g., "I went to... cancel that"). Once you pause, the app has
   already sent what you said to the model and a reply is on its way.
-- The companion keeps a memory: when you say "Bye Bye" it writes a short
-  summary of the session to `memory.md`, and reads it back at the next
-  "Hey Chat". Open or edit that file any time to see or change what it
-  remembers; delete it to make the companion forget everything.
+- The companion keeps two kinds of memory in a git-ignored `memory/` folder:
+  - `durable.md` — a knowledge base of **Facts**, **Goals**, and **English**
+    focus areas. It is loaded in full at the start of every session and is
+    rewritten and merged by the brain when you say goodbye, so durable facts
+    never age out.
+  - `timeline.md` — one dated entry per session. Only the most recent portion
+    (`TIMELINE_MAX_CHARS`) is loaded, so old sessions naturally fade.
+  Both files are plain markdown you can read or hand-edit. Delete the
+  `memory/` folder to start fresh.
