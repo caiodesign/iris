@@ -14,7 +14,7 @@ from companion.memory import Memory
 from companion.providers import REQUIRED_ENV, make_provider
 from companion.speaker import Speaker
 from companion.state_machine import Action, StateMachine
-from companion.transcriber import LocalTranscriber
+from companion.transcriber import make_transcriber
 from companion.voice_detector import VoiceDetector
 
 PROVIDER_NAMES = ["local", "claude", "openai", "zai"]
@@ -80,11 +80,13 @@ def check_tts_files_available() -> None:
         sys.exit(1)
 
 
-def load_transcriber() -> LocalTranscriber:
+def load_transcriber(ears: str):
+    if ears == "openai":
+        # Cloud ears: no GPU model to load, so no CUDA warm-up. The key was
+        # already checked at startup.
+        return make_transcriber("openai")
     try:
-        transcriber = LocalTranscriber(
-            config.WHISPER_MODEL_SIZE, config.WHISPER_DEVICE, config.WHISPER_COMPUTE_TYPE
-        )
+        transcriber = make_transcriber("local")
         # CUDA libraries load lazily on the first transcription, not at model
         # construction — warm up now so GPU problems surface here, with the
         # hint below, instead of as a traceback mid-conversation.
@@ -128,6 +130,10 @@ def main() -> None:
     args = parser.parse_args()
     brain = choose_from_menu("brain", PROVIDER_NAMES, config.LLM_PROVIDER, args.brain)
     print(f"Brain: {brain}")
+    ears = choose_from_menu(
+        "ears (transcription)", STT_NAMES, config.STT_PROVIDER, args.ears
+    )
+    print(f"Ears: {ears}")
 
     print("Checking services and microphone...")
     if brain == "local":
@@ -136,6 +142,10 @@ def main() -> None:
         check_ollama_reachable()
     else:
         check_api_key_available(brain)
+    if ears == "openai":
+        # OpenAI cloud ears reuse the brain's OPENAI_API_KEY; fail fast if
+        # absent (REQUIRED_ENV["openai"] == "OPENAI_API_KEY").
+        check_api_key_available("openai")
     check_microphone_available()
     check_tts_files_available()
 
@@ -147,7 +157,7 @@ def main() -> None:
         preroll_ms=config.PREROLL_MS,
         vad_aggressiveness=config.VAD_AGGRESSIVENESS,
     )
-    transcriber = load_transcriber()
+    transcriber = load_transcriber(ears)
     llm = LLMClient(make_provider(brain), config.SYSTEM_PROMPT)
     memory = Memory(config.MEMORY_PATH, config.MEMORY_MAX_CHARS)
     speaker = Speaker(
@@ -163,7 +173,14 @@ def main() -> None:
     try:
         while True:
             audio = detector.listen_for_utterance()
-            text = transcriber.transcribe(audio)
+            try:
+                text = transcriber.transcribe(audio)
+            except Exception as exc:
+                # Cloud STT can fail on a network blip; a local frame can be
+                # bad. Drop this utterance and keep listening instead of
+                # crashing the session (mirrors the llm.send guard below).
+                print(f"WARNING: Transcription failed ({exc}).")
+                continue
             if not text:
                 continue
 
