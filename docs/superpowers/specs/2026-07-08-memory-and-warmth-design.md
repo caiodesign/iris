@@ -64,10 +64,13 @@ No LLM knowledge in this module — it is pure file I/O.
 - `reset(memory: str = "")` — re-seeds history with the system prompt; if
   `memory` is non-empty, the system message becomes
   `SYSTEM_PROMPT + "\n\nWhat you remember about the user from previous sessions:\n" + memory`.
-- `summarize() -> str` — one-off `ollama.chat` call: current history plus an
-  appended user instruction asking for the 3–5 bullet summary. The
+- `summarize(instruction: str) -> str` — one-off `ollama.chat` call: current
+  history plus the appended summarization instruction (`SUMMARY_PROMPT` from
+  config, passed in by `main.py` so this module stays config-free). The
   instruction and reply are NOT stored in `self.history` (the session is
   over). Returns the reply text.
+- `has_user_turns() -> bool` — True if the history contains at least one
+  user message; `main.py` uses it to skip summarizing empty sessions.
 
 ### 4. Config (`companion/config.py`)
 
