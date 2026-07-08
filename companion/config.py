@@ -30,6 +30,13 @@ SILENCE_TIMEOUT_MS = 2000
 PREROLL_MS = 300
 VAD_AGGRESSIVENESS = 2
 
+# Push-to-talk: hold a key/button to record instead of voice-activity detection.
+# Enabled at launch (the startup prompt or --ptt); this names the trigger.
+# "MOUSE_4"/"MOUSE_5" are the mouse side buttons (back/forward). Any pynput
+# keyboard key name also works, e.g. "space", "ctrl_r" — useful if your mouse
+# or OS does not report side buttons (see README).
+PTT_KEY = "MOUSE_4"
+
 KOKORO_MODEL_PATH = "kokoro-v1.0.onnx"
 KOKORO_VOICES_PATH = "voices-v1.0.bin"
 KOKORO_VOICE = "am_michael"
