@@ -31,11 +31,16 @@ def check_microphone_available() -> None:
         sys.exit(1)
 
 
-def check_voice_file_available() -> None:
-    if not os.path.exists(config.PIPER_VOICE_PATH):
+def check_tts_files_available() -> None:
+    missing = [
+        path
+        for path in (config.KOKORO_MODEL_PATH, config.KOKORO_VOICES_PATH)
+        if not os.path.exists(path)
+    ]
+    if missing:
         print(
-            f"ERROR: Piper voice file not found at '{config.PIPER_VOICE_PATH}'. "
-            "Run README step 4 from the project root to download it."
+            f"ERROR: Kokoro TTS file(s) not found: {', '.join(missing)}. "
+            "Run README step 4 from the project root to download them."
         )
         sys.exit(1)
 
@@ -74,7 +79,7 @@ def main() -> None:
     print("Checking Ollama and microphone...")
     check_ollama_reachable()
     check_microphone_available()
-    check_voice_file_available()
+    check_tts_files_available()
 
     print("Loading models (this may take a moment)...")
     detector = VoiceDetector(
@@ -86,7 +91,12 @@ def main() -> None:
     )
     transcriber = load_transcriber()
     llm = LLMClient(config.OLLAMA_MODEL, config.SYSTEM_PROMPT)
-    speaker = Speaker(config.PIPER_VOICE_PATH)
+    speaker = Speaker(
+        config.KOKORO_MODEL_PATH,
+        config.KOKORO_VOICES_PATH,
+        config.KOKORO_VOICE,
+        config.KOKORO_SPEED,
+    )
     machine = StateMachine()
 
     print(f'Ready. Say "{config.WAKE_PHRASE[0]}" to start.')

@@ -22,10 +22,14 @@ session.
    If the app still fails at startup with a CUDA/cuDNN error, open
    `companion/config.py` and set `WHISPER_DEVICE = "cpu"` and
    `WHISPER_COMPUTE_TYPE = "int8"` — slower, but always works.
-4. Download a Piper voice (run from the project root, so the file lands here):
+4. Download the Kokoro voice model (two files, ~330 MB total, run from the
+   project root so they land here):
    ```
-   python -m piper.download_voices en_US-lessac-medium
+   curl -L -o kokoro-v1.0.onnx https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx
+   curl -L -o voices-v1.0.bin https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
    ```
+   To change the voice or speaking speed, edit `KOKORO_VOICE` / `KOKORO_SPEED`
+   in `companion/config.py` (voice list: https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md).
 5. Run it:
    ```
    python -m companion.main
