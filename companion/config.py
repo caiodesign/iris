@@ -10,7 +10,9 @@ WHISPER_COMPUTE_TYPE = "float16"
 
 SAMPLE_RATE = 16000
 FRAME_DURATION_MS = 30
-SILENCE_TIMEOUT_MS = 800
+# 2s so a language learner can pause to think mid-sentence without being
+# cut off; also the delay before the companion starts answering.
+SILENCE_TIMEOUT_MS = 2000
 PREROLL_MS = 300
 VAD_AGGRESSIVENESS = 2
 
@@ -49,5 +51,8 @@ SYSTEM_PROMPT = (
     "grammar correction, or vocabulary building) rather than reading a "
     "fixed menu, then adapt your style to his answer. Your replies are "
     "spoken aloud, not read: keep them short (one to three sentences), "
-    "natural, and free of lists, markdown, emojis, and stage directions."
+    "natural, and free of lists, markdown, and emojis. Never write "
+    "actions, emotions, or sounds in parentheses or asterisks — no "
+    '"(laughs)", "(smiling)", "*pauses*" — only the exact words you '
+    "would speak out loud."
 )
