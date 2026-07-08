@@ -29,3 +29,21 @@ def test_transcribe_returns_empty_string_for_silence():
         result = transcriber.transcribe(np.zeros(16000, dtype=np.float32))
 
     assert result == ""
+
+
+def test_init_registers_pip_nvidia_dll_dirs_before_loading_model():
+    # pip's nvidia-* wheels put cuBLAS/cuDNN DLLs in site-packages/nvidia/*/bin,
+    # which is not on Windows' DLL search path; without registration CTranslate2
+    # crashes with "cublas64_12.dll is not found" at the first transcription.
+    with patch("companion.transcriber.WhisperModel"), patch(
+        "companion.transcriber.site.getsitepackages", return_value=["fake_site"]
+    ), patch(
+        "companion.transcriber.site.getusersitepackages", return_value="fake_user_site"
+    ), patch(
+        "companion.transcriber.glob.glob", return_value=["fake_site/nvidia/cublas/bin"]
+    ), patch(
+        "companion.transcriber.os.add_dll_directory", create=True
+    ) as mock_add_dll:
+        Transcriber("base.en", "cuda", "float16")
+
+    mock_add_dll.assert_any_call("fake_site/nvidia/cublas/bin")

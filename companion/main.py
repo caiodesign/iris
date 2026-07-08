@@ -2,6 +2,7 @@
 import os
 import sys
 
+import numpy as np
 import ollama
 import sounddevice as sd
 
@@ -41,9 +42,14 @@ def check_voice_file_available() -> None:
 
 def load_transcriber() -> Transcriber:
     try:
-        return Transcriber(
+        transcriber = Transcriber(
             config.WHISPER_MODEL_SIZE, config.WHISPER_DEVICE, config.WHISPER_COMPUTE_TYPE
         )
+        # CUDA libraries load lazily on the first transcription, not at model
+        # construction — warm up now so GPU problems surface here, with the
+        # hint below, instead of as a traceback mid-conversation.
+        transcriber.transcribe(np.zeros(config.SAMPLE_RATE, dtype=np.float32))
+        return transcriber
     except Exception as exc:
         print(
             f"ERROR: Could not load the Whisper model on "
