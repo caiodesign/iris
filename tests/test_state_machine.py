@@ -84,3 +84,11 @@ def test_returns_to_asleep_behavior_after_sleeping():
     assert action == Action.IGNORE
     action = machine.process("hey chat again please")
     assert action == Action.WAKE
+
+
+def test_stop_takes_precedence_over_cancel_in_same_utterance():
+    machine = StateMachine()
+    machine.process("hey chat")
+    action = machine.process("cancel that, bye bye")
+    assert action == Action.SLEEP
+    assert machine.state == State.ASLEEP

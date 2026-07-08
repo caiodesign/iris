@@ -10,6 +10,9 @@ class LLMClient:
 
     def send(self, user_text: str) -> str:
         self.history.append({"role": "user", "content": user_text})
+        # list(...) snapshots history at call time — the live list is mutated
+        # by the append below, and callers (and mock-based tests) must not
+        # observe that mutation. Do not "simplify" back to messages=self.history.
         response = ollama.chat(model=self.model, messages=list(self.history))
         reply = response["message"]["content"]
         self.history.append({"role": "assistant", "content": reply})

@@ -1,4 +1,5 @@
 # companion/main.py
+import os
 import sys
 
 import ollama
@@ -26,6 +27,15 @@ def check_microphone_available() -> None:
             pass
     except Exception as exc:
         print(f"ERROR: Could not access a microphone ({exc}).")
+        sys.exit(1)
+
+
+def check_voice_file_available() -> None:
+    if not os.path.exists(config.PIPER_VOICE_PATH):
+        print(
+            f"ERROR: Piper voice file not found at '{config.PIPER_VOICE_PATH}'. "
+            "Run README step 4 from the project root to download it."
+        )
         sys.exit(1)
 
 
@@ -58,6 +68,7 @@ def main() -> None:
     print("Checking Ollama and microphone...")
     check_ollama_reachable()
     check_microphone_available()
+    check_voice_file_available()
 
     print("Loading models (this may take a moment)...")
     detector = VoiceDetector(
