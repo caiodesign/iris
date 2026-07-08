@@ -1,10 +1,12 @@
 # tests/test_transcriber.py
+import io
+import wave
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 
-from companion.transcriber import LocalTranscriber, make_transcriber
+from companion.transcriber import LocalTranscriber, _encode_wav, make_transcriber
 
 
 def test_transcribe_joins_and_strips_segment_text():
@@ -59,3 +61,27 @@ def test_make_transcriber_builds_local():
 def test_make_transcriber_rejects_unknown_name():
     with pytest.raises(ValueError):
         make_transcriber("robot-ears")
+
+
+def test_encode_wav_is_16k_mono_pcm16_and_round_trips():
+    samples = np.array([0.0, 0.5, -0.5, 1.0, -1.0], dtype=np.float32)
+
+    data = _encode_wav(samples, sample_rate=16000)
+
+    assert data[:4] == b"RIFF"
+    with wave.open(io.BytesIO(data), "rb") as wav:
+        assert wav.getnchannels() == 1
+        assert wav.getsampwidth() == 2
+        assert wav.getframerate() == 16000
+        frames = wav.readframes(wav.getnframes())
+
+    decoded = np.frombuffer(frames, dtype="<i2")
+    expected = np.array([0, 16383, -16383, 32767, -32767], dtype="<i2")
+    assert np.array_equal(decoded, expected)
+
+
+def test_encode_wav_clips_out_of_range_samples():
+    data = _encode_wav(np.array([2.0, -2.0], dtype=np.float32))
+    with wave.open(io.BytesIO(data), "rb") as wav:
+        decoded = np.frombuffer(wav.readframes(wav.getnframes()), dtype="<i2")
+    assert np.array_equal(decoded, np.array([32767, -32767], dtype="<i2"))

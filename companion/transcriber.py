@@ -1,10 +1,27 @@
 # companion/transcriber.py
 import glob
+import io
 import os
 import site
+import wave
 
 import numpy as np
 from faster_whisper import WhisperModel
+
+
+def _encode_wav(audio: np.ndarray, sample_rate: int = 16000) -> bytes:
+    # The OpenAI transcription endpoint wants an audio file, but we hold a
+    # float32 mono array in [-1, 1]. Clip, scale to 16-bit PCM, and wrap it in
+    # a WAV container in memory — stdlib only, so no extra dependency.
+    clipped = np.clip(audio, -1.0, 1.0)
+    pcm16 = (clipped * 32767.0).astype("<i2")
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(sample_rate)
+        wav.writeframes(pcm16.tobytes())
+    return buffer.getvalue()
 
 
 def _register_pip_nvidia_dll_dirs() -> None:
