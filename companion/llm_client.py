@@ -1,5 +1,20 @@
 # companion/llm_client.py
+import re
+
 import ollama
+
+# llama3.1 writes roleplay stage directions — "(laughs)", "*smiles*" —
+# even when the system prompt forbids them, and the TTS would read them
+# aloud verbatim. Strip them before the reply is stored or spoken; keeping
+# them out of history also stops the model imitating its own habit.
+_STAGE_DIRECTIONS = re.compile(r"\([^)]*\)|\*[^*]*\*")
+
+
+def _strip_stage_directions(text: str) -> str:
+    cleaned = _STAGE_DIRECTIONS.sub("", text)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned)
+    cleaned = re.sub(r"\s+([,.!?;:])", r"\1", cleaned)
+    return cleaned.strip()
 
 
 class LLMClient:
@@ -14,7 +29,7 @@ class LLMClient:
         # by the append below, and callers (and mock-based tests) must not
         # observe that mutation. Do not "simplify" back to messages=self.history.
         response = ollama.chat(model=self.model, messages=list(self.history))
-        reply = response["message"]["content"]
+        reply = _strip_stage_directions(response["message"]["content"])
         self.history.append({"role": "assistant", "content": reply})
         return reply
 

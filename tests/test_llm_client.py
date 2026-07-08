@@ -87,6 +87,30 @@ def test_summarize_asks_ollama_without_mutating_history():
     )
 
 
+def test_send_strips_stage_directions_before_storing_and_returning():
+    fake_response = {
+        "message": {
+            "role": "assistant",
+            "content": "(laughs) Well, Rome sounds *smiling* amazing (pauses) .",
+        }
+    }
+    with patch("companion.llm_client.ollama.chat", return_value=fake_response):
+        client = LLMClient("llama3.1:8b", "system prompt")
+        reply = client.send("I visited Rome!")
+
+    assert reply == "Well, Rome sounds amazing."
+    assert client.history[-1] == {"role": "assistant", "content": "Well, Rome sounds amazing."}
+
+
+def test_send_leaves_clean_replies_untouched():
+    fake_response = {"message": {"role": "assistant", "content": "Nice! How was Rome?"}}
+    with patch("companion.llm_client.ollama.chat", return_value=fake_response):
+        client = LLMClient("llama3.1:8b", "system prompt")
+        reply = client.send("I visited Rome!")
+
+    assert reply == "Nice! How was Rome?"
+
+
 def test_has_user_turns_false_for_fresh_session_true_after_send():
     fake_response = {"message": {"role": "assistant", "content": "Sure!"}}
     with patch("companion.llm_client.ollama.chat", return_value=fake_response):
