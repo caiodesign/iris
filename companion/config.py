@@ -4,6 +4,16 @@ STOP_PHRASE = "bye bye"
 
 OLLAMA_MODEL = "llama3.1:8b"
 
+# Which brain answers: "local" (Ollama, free), "claude", "openai", or "zai".
+# Pick at launch via the startup menu or --brain; this is the Enter default.
+LLM_PROVIDER = "local"
+
+ANTHROPIC_MODEL = "claude-sonnet-5"
+OPENAI_MODEL = "gpt-5.4"
+ZAI_MODEL = "glm-5"
+ZAI_BASE_URL = "https://api.z.ai/api/paas/v4/"
+CLOUD_MAX_TOKENS = 1024
+
 WHISPER_MODEL_SIZE = "base.en"
 WHISPER_DEVICE = "cuda"
 WHISPER_COMPUTE_TYPE = "float16"
