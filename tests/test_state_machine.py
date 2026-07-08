@@ -36,6 +36,13 @@ def test_wake_detection_survives_whisper_punctuation():
     assert machine.state == State.ACTIVE
 
 
+def test_asleep_wakes_on_misheard_wake_phrase():
+    machine = StateMachine()
+    action = machine.process("Hey such, can we practice?")
+    assert action == Action.WAKE
+    assert machine.state == State.ACTIVE
+
+
 def test_stop_detection_survives_hyphenation():
     # Whisper routinely returns "Bye-bye!" for a spoken "bye bye".
     machine = StateMachine()

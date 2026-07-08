@@ -89,7 +89,7 @@ def main() -> None:
     speaker = Speaker(config.PIPER_VOICE_PATH)
     machine = StateMachine()
 
-    print(f'Ready. Say "{config.WAKE_PHRASE}" to start.')
+    print(f'Ready. Say "{config.WAKE_PHRASE[0]}" to start.')
 
     try:
         while True:

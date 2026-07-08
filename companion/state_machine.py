@@ -32,7 +32,7 @@ class StateMachine:
         normalized = _normalize(text)
 
         if self.state == State.ASLEEP:
-            if WAKE_PHRASE in normalized:
+            if any(_normalize(phrase) in normalized for phrase in WAKE_PHRASE):
                 self.state = State.ACTIVE
                 return Action.WAKE
             return Action.IGNORE
