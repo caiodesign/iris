@@ -2,3 +2,4 @@ __pycache__/
 .pytest_cache/
 *.onnx
 *.onnx.json
+voices-v1.0.bin

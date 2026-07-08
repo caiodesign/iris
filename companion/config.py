@@ -16,6 +16,11 @@ VAD_AGGRESSIVENESS = 2
 
 PIPER_VOICE_PATH = "en_US-lessac-medium.onnx"
 
+KOKORO_MODEL_PATH = "kokoro-v1.0.onnx"
+KOKORO_VOICES_PATH = "voices-v1.0.bin"
+KOKORO_VOICE = "am_michael"
+KOKORO_SPEED = 1.0
+
 GREETING = "Hi! What would you like to work on today?"
 
 SYSTEM_PROMPT = (
