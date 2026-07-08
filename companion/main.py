@@ -112,6 +112,23 @@ def speak_safely(speaker: Speaker, text: str) -> None:
         print(f"WARNING: Text-to-speech playback failed ({exc}). Continuing without audio.")
 
 
+def remember_session(llm, memory) -> None:
+    if not llm.has_user_turns():
+        return
+    print("Remembering this session...")
+    # Two independent side-channel calls: a failure in one must not skip the
+    # other, and neither may crash the goodbye (mirrors the send/tts guards).
+    try:
+        memory.append_timeline(llm.summarize(config.TIMELINE_PROMPT))
+    except Exception as exc:
+        print(f"WARNING: Could not update timeline memory ({exc}).")
+    try:
+        merged = llm.summarize(config.DURABLE_MERGE_PROMPT + memory.load_durable())
+        memory.write_durable(merged)
+    except Exception as exc:
+        print(f"WARNING: Could not update durable memory ({exc}).")
+
+
 def main() -> None:
     load_dotenv()
     parser = argparse.ArgumentParser(description="Voice English companion")
@@ -159,7 +176,7 @@ def main() -> None:
     )
     transcriber = load_transcriber(ears)
     llm = LLMClient(make_provider(brain), config.SYSTEM_PROMPT)
-    memory = Memory(config.MEMORY_PATH, config.MEMORY_MAX_CHARS)
+    memory = Memory(config.MEMORY_DIR, config.TIMELINE_MAX_CHARS)
     speaker = Speaker(
         config.KOKORO_MODEL_PATH,
         config.KOKORO_VOICES_PATH,
@@ -202,12 +219,7 @@ def main() -> None:
             elif action == Action.SLEEP:
                 print("Going back to sleep.")
                 speak_safely(speaker, "Bye for now!")
-                if llm.has_user_turns():
-                    print("Remembering this session...")
-                    try:
-                        memory.append_session(llm.summarize(config.SUMMARY_PROMPT))
-                    except Exception as exc:
-                        print(f"WARNING: Could not save session memory ({exc}).")
+                remember_session(llm, memory)
             elif action == Action.FORWARD:
                 try:
                     reply = llm.send(text)

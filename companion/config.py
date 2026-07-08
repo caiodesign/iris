@@ -37,14 +37,30 @@ KOKORO_SPEED = 1.0
 
 USER_NAME = "Caio"
 
-MEMORY_PATH = "memory.md"
-MEMORY_MAX_CHARS = 6000
+MEMORY_DIR = "memory"
+# Recent-tail window for the dated timeline. Durable memory (Facts/Goals/
+# English) is always loaded in full, so it has no char cap here.
+TIMELINE_MAX_CHARS = 4000
 
-SUMMARY_PROMPT = (
-    "The session is over. Summarize it in 3 to 5 short bullet points for "
-    "your own memory before the next session: topics discussed, English "
-    "mistakes the user made, and personal facts you learned about the user "
-    "(trips, food, family, work, plans). Write only the bullet points."
+TIMELINE_PROMPT = (
+    "The session is over. Summarize it in 2 to 4 short bullet points for "
+    "your timeline: what you talked about and any notable moments. Write "
+    "only the bullet points."
+)
+
+# Merge instruction for durable memory. The current durable.md contents are
+# appended after this text before the call.
+DURABLE_MERGE_PROMPT = (
+    "The session is over. Below is what you currently remember about the "
+    "user, in three sections: Facts (durable personal facts), Goals (what he "
+    "wants to work on or talk about), and English (recurring mistakes and "
+    "focus areas). Update this memory using the session: keep every fact "
+    "that is still true, add anything new you learned, refine or remove only "
+    "what this session directly contradicts, and merge duplicates. Keep it "
+    "concise. Return the full updated memory as exactly those three markdown "
+    "sections (## Facts, ## Goals, ## English) and nothing else; keep a "
+    "section's heading even if it has no bullets yet.\n\n"
+    "Current memory:\n"
 )
 
 GREETING = f"Hey {USER_NAME}, good to hear you! So — what are we diving into today?"
