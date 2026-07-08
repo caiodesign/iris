@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 from companion.main import (
     PROVIDER_NAMES,
     STT_NAMES,
+    ask_yes_no,
     choose_from_menu,
     remember_session,
 )
@@ -97,3 +98,25 @@ def test_remember_session_keeps_timeline_when_durable_call_fails():
 
     memory.append_timeline.assert_called_once_with("- Talked about food.")
     memory.write_durable.assert_not_called()
+
+
+def test_ask_yes_no_cli_flag_skips_prompt():
+    with patch("builtins.input") as mock_input:
+        assert ask_yes_no("Push-to-talk?", False, True) is True
+    mock_input.assert_not_called()
+
+
+def test_ask_yes_no_empty_returns_default():
+    with patch("builtins.input", return_value=""):
+        assert ask_yes_no("Push-to-talk?", False, False) is False
+
+
+def test_ask_yes_no_accepts_yes_variants():
+    for value in ("y", "yes", "YES"):
+        with patch("builtins.input", return_value=value):
+            assert ask_yes_no("Push-to-talk?", False, False) is True
+
+
+def test_ask_yes_no_treats_other_input_as_no():
+    with patch("builtins.input", return_value="maybe"):
+        assert ask_yes_no("Push-to-talk?", False, False) is False
