@@ -79,6 +79,34 @@ accurately than local Whisper — at a small per-minute cost.
    roughly halve the cost. Ballpark at 30 min/day: about $5/month on full
    transcribe, about $2.70/month on mini.
 
+## Push-to-talk
+
+By default the companion listens continuously with voice-activity detection.
+Optionally you can switch to **push-to-talk**: audio is captured only while you
+hold a button, so the mic (and any cloud transcription) only ever hears what you
+deliberately say.
+
+Enable it at launch — the startup prompt asks `Push-to-talk (hold a key to
+record)? [y/N]`, or pass `--ptt` to skip the prompt:
+
+```bash
+python -m companion.main --ptt
+```
+
+The wake word still applies: hold the button and say "Hey chat" to start, hold
+and speak to talk, hold and say "bye bye" to end the session.
+
+**Choosing the button.** `PTT_KEY` in `companion/config.py` names the trigger.
+The default `"MOUSE_4"` is the mouse back button (`"MOUSE_5"` is forward). You can
+also use any keyboard key, e.g. `"space"` or `"ctrl_r"`.
+
+**macOS:** the first time push-to-talk runs, macOS asks for **Accessibility**
+permission (System Settings → Privacy & Security → Accessibility) so the app can
+read the button globally. Until you grant it, macOS silently drops the events —
+if you hold the button and nothing records, that permission is the likely cause.
+If your mouse or OS does not report the side buttons at all, set `PTT_KEY` to a
+keyboard key instead.
+
 ## Usage notes
 
 - Say "Cancel That" **in the same breath** as the sentence you want to

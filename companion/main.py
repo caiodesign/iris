@@ -57,6 +57,15 @@ def choose_from_menu(label, names, default, cli_choice) -> str:
     return default
 
 
+def ask_yes_no(label, default, cli_flag) -> bool:
+    if cli_flag:
+        return True
+    answer = input(f"{label} [y/N]: ").strip().lower()
+    if not answer:
+        return default
+    return answer in ("y", "yes")
+
+
 def check_microphone_available() -> None:
     try:
         with sd.InputStream(samplerate=config.SAMPLE_RATE, channels=1, dtype="int16"):
@@ -144,6 +153,11 @@ def main() -> None:
         default=None,
         help="skip the ears menu and use this transcription backend",
     )
+    parser.add_argument(
+        "--ptt",
+        action="store_true",
+        help="enable push-to-talk (hold PTT_KEY to record) and skip the prompt",
+    )
     args = parser.parse_args()
     brain = choose_from_menu("brain", PROVIDER_NAMES, config.LLM_PROVIDER, args.brain)
     print(f"Brain: {brain}")
@@ -151,6 +165,8 @@ def main() -> None:
         "ears (transcription)", STT_NAMES, config.STT_PROVIDER, args.ears
     )
     print(f"Ears: {ears}")
+    ptt = ask_yes_no("Push-to-talk (hold a key to record)?", False, args.ptt)
+    print(f"Push-to-talk: {'on' if ptt else 'off'}")
 
     print("Checking services and microphone...")
     if brain == "local":
@@ -167,13 +183,22 @@ def main() -> None:
     check_tts_files_available()
 
     print("Loading models (this may take a moment)...")
-    detector = VoiceDetector(
-        sample_rate=config.SAMPLE_RATE,
-        frame_duration_ms=config.FRAME_DURATION_MS,
-        silence_timeout_ms=config.SILENCE_TIMEOUT_MS,
-        preroll_ms=config.PREROLL_MS,
-        vad_aggressiveness=config.VAD_AGGRESSIVENESS,
-    )
+    if ptt:
+        # Lazy import: VAD-only users never load pynput. A bad PTT_KEY raises
+        # here (before the session starts) with an actionable message.
+        from companion.push_to_talk import PushToTalkRecorder
+
+        capture = PushToTalkRecorder(
+            config.SAMPLE_RATE, config.FRAME_DURATION_MS, config.PTT_KEY
+        )
+    else:
+        capture = VoiceDetector(
+            sample_rate=config.SAMPLE_RATE,
+            frame_duration_ms=config.FRAME_DURATION_MS,
+            silence_timeout_ms=config.SILENCE_TIMEOUT_MS,
+            preroll_ms=config.PREROLL_MS,
+            vad_aggressiveness=config.VAD_AGGRESSIVENESS,
+        )
     transcriber = load_transcriber(ears)
     llm = LLMClient(make_provider(brain), config.SYSTEM_PROMPT)
     memory = Memory(config.MEMORY_DIR, config.TIMELINE_MAX_CHARS)
@@ -185,11 +210,14 @@ def main() -> None:
     )
     machine = StateMachine()
 
-    print(f'Ready. Say "{config.WAKE_PHRASE[0]}" to start.')
+    if ptt:
+        print(f'Ready. Hold your push-to-talk key and say "{config.WAKE_PHRASE[0]}" to start.')
+    else:
+        print(f'Ready. Say "{config.WAKE_PHRASE[0]}" to start.')
 
     try:
         while True:
-            audio = detector.listen_for_utterance()
+            audio = capture.listen_for_utterance()
             try:
                 text = transcriber.transcribe(audio)
             except Exception as exc:
@@ -236,6 +264,15 @@ def main() -> None:
                 speak_safely(speaker, reply)
     except KeyboardInterrupt:
         print("\nExiting.")
+    finally:
+        # PushToTalkRecorder holds a background listener; VoiceDetector has no
+        # close(). Never let cleanup mask the exit.
+        close = getattr(capture, "close", None)
+        if close is not None:
+            try:
+                close()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
