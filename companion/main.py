@@ -8,6 +8,7 @@ import sounddevice as sd
 
 from companion import config
 from companion.llm_client import LLMClient
+from companion.memory import Memory
 from companion.speaker import Speaker
 from companion.state_machine import Action, StateMachine
 from companion.transcriber import Transcriber
@@ -91,6 +92,7 @@ def main() -> None:
     )
     transcriber = load_transcriber()
     llm = LLMClient(config.OLLAMA_MODEL, config.SYSTEM_PROMPT)
+    memory = Memory(config.MEMORY_PATH, config.MEMORY_MAX_CHARS)
     speaker = Speaker(
         config.KOKORO_MODEL_PATH,
         config.KOKORO_VOICES_PATH,
@@ -118,7 +120,7 @@ def main() -> None:
                 # Fresh history per session, and the greeting is seeded as an
                 # assistant turn — otherwise the LLM doesn't know the opening
                 # question was already asked and re-asks it.
-                llm.reset()
+                llm.reset(memory.load())
                 llm.seed_assistant(config.GREETING)
                 speak_safely(speaker, config.GREETING)
             elif action == Action.CANCEL:
@@ -126,6 +128,12 @@ def main() -> None:
             elif action == Action.SLEEP:
                 print("Going back to sleep.")
                 speak_safely(speaker, "Bye for now!")
+                if llm.has_user_turns():
+                    print("Remembering this session...")
+                    try:
+                        memory.append_session(llm.summarize(config.SUMMARY_PROMPT))
+                    except Exception as exc:
+                        print(f"WARNING: Could not save session memory ({exc}).")
             elif action == Action.FORWARD:
                 reply = llm.send(text)
                 print(f"Companion: {reply}")
