@@ -124,3 +124,30 @@ def test_close_stops_the_listener():
         recorder.close()
 
     MockListener.return_value.stop.assert_called_once()
+
+
+def test_ptt_listen_returns_none_when_stop_requested_before_press():
+    recorder = _build_recorder()
+    # Button never pressed: without stop_check this would block forever.
+    audio = recorder.listen_for_utterance(stop_check=lambda: True)
+    assert audio is None
+
+
+def test_ptt_listen_returns_none_when_stop_requested_mid_recording():
+    recorder = _build_recorder()
+    frame = np.ones((160, 1), dtype=np.int16)
+    calls = {"n": 0}
+
+    def stop_check():
+        calls["n"] += 1
+        return calls["n"] >= 3
+
+    with patch("companion.push_to_talk.sd.InputStream") as MockStream:
+        MockStream.return_value.__enter__.return_value.read.return_value = (
+            frame,
+            False,
+        )
+        recorder._pressed.set()
+        audio = recorder.listen_for_utterance(stop_check=stop_check)
+
+    assert audio is None

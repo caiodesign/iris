@@ -83,10 +83,12 @@ class PushToTalkRecorder:
         if key == self._target:
             self._pressed.clear()
 
-    def listen_for_utterance(self) -> np.ndarray:
-        # Block with no busy-loop until the button goes down, then record until
-        # it comes up. Release latency is one frame (frame_duration_ms).
-        self._pressed.wait()
+    def listen_for_utterance(self, stop_check=None) -> "np.ndarray | None":
+        # Wait for the button in short slices instead of a single blocking
+        # wait() so a stop request interrupts within ~100 ms.
+        while not self._pressed.wait(timeout=0.1):
+            if stop_check is not None and stop_check():
+                return None
         frames = []
         with sd.InputStream(
             samplerate=self.sample_rate,
@@ -95,6 +97,8 @@ class PushToTalkRecorder:
             blocksize=self.frame_size,
         ) as stream:
             while self._pressed.is_set():
+                if stop_check is not None and stop_check():
+                    return None
                 frame, _ = stream.read(self.frame_size)
                 frames.append(frame)
 

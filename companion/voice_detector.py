@@ -21,7 +21,7 @@ class VoiceDetector:
         self.preroll_frames = preroll_ms // frame_duration_ms
         self.vad = webrtcvad.Vad(vad_aggressiveness)
 
-    def listen_for_utterance(self) -> np.ndarray:
+    def listen_for_utterance(self, stop_check=None) -> "np.ndarray | None":
         frames = []
         # Ring buffer of the most recent pre-speech frames; prepended on
         # trigger so the first syllable isn't clipped off the utterance.
@@ -36,6 +36,10 @@ class VoiceDetector:
             blocksize=self.frame_size,
         ) as stream:
             while True:
+                # Checked every frame (~30 ms) so the web UI's End button
+                # interrupts promptly even while waiting for speech.
+                if stop_check is not None and stop_check():
+                    return None
                 frame, _ = stream.read(self.frame_size)
                 is_speech = self.vad.is_speech(frame.tobytes(), self.sample_rate)
 
