@@ -20,7 +20,7 @@ def _register_pip_nvidia_dll_dirs() -> None:
             os.add_dll_directory(dll_dir)
 
 
-class Transcriber:
+class LocalTranscriber:
     def __init__(self, model_size: str, device: str, compute_type: str):
         _register_pip_nvidia_dll_dirs()
         self.model = WhisperModel(model_size, device=device, compute_type=compute_type)
@@ -28,3 +28,15 @@ class Transcriber:
     def transcribe(self, audio: np.ndarray) -> str:
         segments, _ = self.model.transcribe(audio, beam_size=5)
         return " ".join(segment.text.strip() for segment in segments).strip()
+
+
+def make_transcriber(name: str):
+    from companion import config
+
+    if name == "local":
+        return LocalTranscriber(
+            config.WHISPER_MODEL_SIZE,
+            config.WHISPER_DEVICE,
+            config.WHISPER_COMPUTE_TYPE,
+        )
+    raise ValueError(f"Unknown transcriber: {name}")

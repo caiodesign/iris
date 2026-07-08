@@ -2,8 +2,9 @@
 from unittest.mock import MagicMock, patch
 
 import numpy as np
+import pytest
 
-from companion.transcriber import Transcriber
+from companion.transcriber import LocalTranscriber, make_transcriber
 
 
 def test_transcribe_joins_and_strips_segment_text():
@@ -15,7 +16,7 @@ def test_transcribe_joins_and_strips_segment_text():
             [fake_segment_1, fake_segment_2],
             None,
         )
-        transcriber = Transcriber("base.en", "cpu", "int8")
+        transcriber = LocalTranscriber("base.en", "cpu", "int8")
         result = transcriber.transcribe(np.zeros(16000, dtype=np.float32))
 
     assert result == "Hello world"
@@ -25,7 +26,7 @@ def test_transcribe_joins_and_strips_segment_text():
 def test_transcribe_returns_empty_string_for_silence():
     with patch("companion.transcriber.WhisperModel") as MockModel:
         MockModel.return_value.transcribe.return_value = ([], None)
-        transcriber = Transcriber("base.en", "cpu", "int8")
+        transcriber = LocalTranscriber("base.en", "cpu", "int8")
         result = transcriber.transcribe(np.zeros(16000, dtype=np.float32))
 
     assert result == ""
@@ -44,6 +45,17 @@ def test_init_registers_pip_nvidia_dll_dirs_before_loading_model():
     ), patch(
         "companion.transcriber.os.add_dll_directory", create=True
     ) as mock_add_dll:
-        Transcriber("base.en", "cuda", "float16")
+        LocalTranscriber("base.en", "cuda", "float16")
 
     mock_add_dll.assert_any_call("fake_site/nvidia/cublas/bin")
+
+
+def test_make_transcriber_builds_local():
+    with patch("companion.transcriber.WhisperModel"):
+        transcriber = make_transcriber("local")
+    assert isinstance(transcriber, LocalTranscriber)
+
+
+def test_make_transcriber_rejects_unknown_name():
+    with pytest.raises(ValueError):
+        make_transcriber("robot-ears")

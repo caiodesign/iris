@@ -14,7 +14,7 @@ from companion.memory import Memory
 from companion.providers import REQUIRED_ENV, make_provider
 from companion.speaker import Speaker
 from companion.state_machine import Action, StateMachine
-from companion.transcriber import Transcriber
+from companion.transcriber import LocalTranscriber
 from companion.voice_detector import VoiceDetector
 
 PROVIDER_NAMES = ["local", "claude", "openai", "zai"]
@@ -79,9 +79,9 @@ def check_tts_files_available() -> None:
         sys.exit(1)
 
 
-def load_transcriber() -> Transcriber:
+def load_transcriber() -> LocalTranscriber:
     try:
-        transcriber = Transcriber(
+        transcriber = LocalTranscriber(
             config.WHISPER_MODEL_SIZE, config.WHISPER_DEVICE, config.WHISPER_COMPUTE_TYPE
         )
         # CUDA libraries load lazily on the first transcription, not at model
