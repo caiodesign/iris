@@ -1,0 +1,236 @@
+# tests/test_session.py
+from unittest.mock import MagicMock
+
+import numpy as np
+
+from companion import config, session
+from companion.state_machine import StateMachine
+
+
+class FakeCapture:
+    """Yields `count` dummy audio arrays, then flags itself exhausted so the
+    should_stop wired in run_scripted ends the loop."""
+
+    def __init__(self, count):
+        self.remaining = count
+        self.exhausted = False
+
+    def listen_for_utterance(self, stop_check=None):
+        if self.remaining == 0:
+            self.exhausted = True
+            return np.zeros(0, dtype=np.float32)
+        self.remaining -= 1
+        return np.ones(160, dtype=np.float32)
+
+
+class FakeTranscriber:
+    """Returns scripted texts in order; an Exception item is raised instead."""
+
+    def __init__(self, texts):
+        self.texts = list(texts)
+
+    def transcribe(self, audio):
+        item = self.texts.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+
+class FakeLLM:
+    def __init__(self, reply="Nice!"):
+        self.reply = reply
+        self.reset_memory = None
+        self.seeded = []
+        self.sent = []
+        self.summaries = ["- timeline entry", "## Facts\n- a fact"]
+        self._has_user = False
+
+    def reset(self, memory=""):
+        self.reset_memory = memory
+
+    def seed_assistant(self, text):
+        self.seeded.append(text)
+
+    def send(self, text):
+        self.sent.append(text)
+        if isinstance(self.reply, Exception):
+            raise self.reply
+        self._has_user = True
+        return self.reply
+
+    def summarize(self, instruction):
+        item = self.summaries.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    def has_user_turns(self):
+        return self._has_user
+
+
+class FakeSpeaker:
+    def __init__(self, fail=False):
+        self.fail = fail
+        self.spoken = []
+
+    def speak(self, text):
+        if self.fail:
+            raise RuntimeError("no audio device")
+        self.spoken.append(text)
+
+
+def run_scripted(texts, llm=None, speaker=None, memory=None):
+    """Drive run_loop through the scripted utterances, then stop."""
+    events = []
+    capture = FakeCapture(len(texts))
+    transcriber = FakeTranscriber(texts)
+    llm = llm if llm is not None else FakeLLM()
+    speaker = speaker if speaker is not None else FakeSpeaker()
+    if memory is None:
+        memory = MagicMock()
+        memory.load.return_value = "remembered stuff"
+        memory.load_durable.return_value = ""
+    session.run_loop(
+        capture,
+        transcriber,
+        llm,
+        memory,
+        speaker,
+        StateMachine(),
+        events.append,
+        lambda: capture.exhausted,
+    )
+    return events, llm, speaker, memory
+
+
+def texts_of(events, kind):
+    return [e["text"] for e in events if e["event"] == kind]
+
+
+def states_of(events):
+    return [e["state"] for e in events if e["event"] == "status"]
+
+
+def test_wake_greets_with_seeded_history_and_memory():
+    events, llm, speaker, memory = run_scripted(["hey chat"])
+    assert "Waking up." in texts_of(events, "system")
+    assert texts_of(events, "reply") == [config.GREETING]
+    # The script ending counts as a stop while awake, so "Bye for now!"
+    # follows the greeting (that path has its own test below).
+    assert speaker.spoken[0] == config.GREETING
+    assert llm.reset_memory == "remembered stuff"
+    assert llm.seeded == [config.GREETING]
+
+
+def test_ignored_speech_while_asleep_emits_nothing():
+    events, llm, speaker, _ = run_scripted(["just background noise"])
+    assert texts_of(events, "heard") == []
+    assert texts_of(events, "reply") == []
+    assert speaker.spoken == []
+    assert llm.sent == []
+
+
+def test_forward_emits_heard_and_reply_and_speaks():
+    events, llm, speaker, _ = run_scripted(["hey chat", "I like ramen"])
+    assert texts_of(events, "heard") == ["I like ramen"]
+    assert "Nice!" in texts_of(events, "reply")
+    assert "Nice!" in speaker.spoken
+    assert llm.sent == ["I like ramen"]
+
+
+def test_status_cycles_listening_thinking_speaking():
+    events, _, _, _ = run_scripted(["hey chat", "I like ramen"])
+    states = states_of(events)
+    assert states[0] == "listening"
+    assert "thinking" in states
+    assert "speaking" in states
+
+
+def test_cancel_discards_without_sending():
+    events, llm, _, _ = run_scripted(["hey chat", "cancel that"])
+    assert "Discarded that." in texts_of(events, "system")
+    assert llm.sent == []
+
+
+def test_sleep_says_goodbye_and_remembers():
+    events, llm, speaker, memory = run_scripted(
+        ["hey chat", "I like ramen", "bye bye"]
+    )
+    assert "Going back to sleep." in texts_of(events, "system")
+    assert "Bye for now!" in speaker.spoken
+    memory.append_timeline.assert_called_once_with("- timeline entry")
+    memory.write_durable.assert_called_once_with("## Facts\n- a fact")
+
+
+def test_stop_while_awake_runs_the_goodbye_path():
+    # The script ends (End button) while the machine is still ACTIVE.
+    events, llm, speaker, memory = run_scripted(["hey chat", "I like ramen"])
+    assert speaker.spoken[-1] == "Bye for now!"
+    memory.append_timeline.assert_called_once()
+    memory.write_durable.assert_called_once()
+
+
+def test_stop_while_asleep_skips_the_goodbye():
+    events, llm, speaker, memory = run_scripted(["hey chat", "bye bye"])
+    # One goodbye from the stop phrase, no second one at loop exit.
+    assert speaker.spoken.count("Bye for now!") == 1
+
+
+def test_transcription_failure_warns_and_continues():
+    events, llm, speaker, _ = run_scripted(
+        [RuntimeError("boom"), "hey chat"]
+    )
+    warnings = texts_of(events, "warning")
+    assert any("Transcription failed" in w for w in warnings)
+    assert texts_of(events, "reply") == [config.GREETING]
+
+
+def test_llm_failure_warns_and_speaks_recovery_line():
+    llm = FakeLLM(reply=RuntimeError("api down"))
+    events, llm, speaker, _ = run_scripted(["hey chat", "hello there"], llm=llm)
+    warnings = texts_of(events, "warning")
+    assert any("brain failed to reply" in w for w in warnings)
+    assert "Sorry, I had trouble thinking. Say that again?" in speaker.spoken
+
+
+def test_tts_failure_warns_and_continues():
+    speaker = FakeSpeaker(fail=True)
+    events, _, _, _ = run_scripted(["hey chat"], speaker=speaker)
+    warnings = texts_of(events, "warning")
+    assert any("Text-to-speech playback failed" in w for w in warnings)
+
+
+def test_remember_session_skips_without_user_turns():
+    llm = MagicMock()
+    llm.has_user_turns.return_value = False
+    memory = MagicMock()
+    events = []
+    session.remember_session(llm, memory, events.append)
+    llm.summarize.assert_not_called()
+    memory.append_timeline.assert_not_called()
+    memory.write_durable.assert_not_called()
+
+
+def test_remember_session_still_merges_durable_when_timeline_fails():
+    llm = MagicMock()
+    llm.has_user_turns.return_value = True
+    llm.summarize.side_effect = [Exception("blip"), "## Facts\n- x"]
+    memory = MagicMock()
+    memory.load_durable.return_value = ""
+    events = []
+    session.remember_session(llm, memory, events.append)
+    memory.append_timeline.assert_not_called()
+    memory.write_durable.assert_called_once_with("## Facts\n- x")
+    assert any(e["event"] == "warning" for e in events)
+
+
+def test_remember_session_keeps_timeline_when_durable_fails():
+    llm = MagicMock()
+    llm.has_user_turns.return_value = True
+    llm.summarize.side_effect = ["- entry", Exception("blip")]
+    memory = MagicMock()
+    memory.load_durable.return_value = ""
+    events = []
+    session.remember_session(llm, memory, events.append)
+    memory.append_timeline.assert_called_once_with("- entry")
+    memory.write_durable.assert_not_called()
