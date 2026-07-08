@@ -7,6 +7,7 @@ import wave
 
 import numpy as np
 from faster_whisper import WhisperModel
+from openai import OpenAI
 
 
 def _encode_wav(audio: np.ndarray, sample_rate: int = 16000) -> bytes:
@@ -47,6 +48,20 @@ class LocalTranscriber:
         return " ".join(segment.text.strip() for segment in segments).strip()
 
 
+class OpenAITranscriber:
+    def __init__(self, model: str):
+        self.client = OpenAI()  # reads OPENAI_API_KEY from env, like the brain
+        self.model = model
+
+    def transcribe(self, audio: np.ndarray) -> str:
+        wav_bytes = _encode_wav(audio)
+        result = self.client.audio.transcriptions.create(
+            model=self.model,
+            file=("speech.wav", wav_bytes, "audio/wav"),
+        )
+        return result.text.strip()
+
+
 def make_transcriber(name: str):
     from companion import config
 
@@ -56,4 +71,6 @@ def make_transcriber(name: str):
             config.WHISPER_DEVICE,
             config.WHISPER_COMPUTE_TYPE,
         )
+    if name == "openai":
+        return OpenAITranscriber(config.OPENAI_TRANSCRIBE_MODEL)
     raise ValueError(f"Unknown transcriber: {name}")

@@ -10,6 +10,7 @@ LLM_PROVIDER = "local"
 
 ANTHROPIC_MODEL = "claude-sonnet-5"
 OPENAI_MODEL = "gpt-5.4"
+OPENAI_TRANSCRIBE_MODEL = "gpt-4o-transcribe"  # cloud "ears"; "gpt-4o-mini-transcribe" halves cost
 ZAI_MODEL = "glm-5"
 ZAI_BASE_URL = "https://api.z.ai/api/paas/v4/"
 CLOUD_MAX_TOKENS = 1024

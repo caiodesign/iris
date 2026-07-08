@@ -85,3 +85,31 @@ def test_encode_wav_clips_out_of_range_samples():
     with wave.open(io.BytesIO(data), "rb") as wav:
         decoded = np.frombuffer(wav.readframes(wav.getnframes()), dtype="<i2")
     assert np.array_equal(decoded, np.array([32767, -32767], dtype="<i2"))
+
+
+from companion.transcriber import OpenAITranscriber
+
+
+def test_openai_transcriber_sends_wav_and_strips_reply():
+    fake_result = MagicMock()
+    fake_result.text = "  Hello there  "
+    with patch("companion.transcriber.OpenAI") as MockOpenAI:
+        client = MockOpenAI.return_value
+        client.audio.transcriptions.create.return_value = fake_result
+
+        transcriber = OpenAITranscriber("gpt-4o-transcribe")
+        result = transcriber.transcribe(np.zeros(16000, dtype=np.float32))
+
+    assert result == "Hello there"
+    kwargs = client.audio.transcriptions.create.call_args.kwargs
+    assert kwargs["model"] == "gpt-4o-transcribe"
+    filename, data, mime = kwargs["file"]
+    assert filename == "speech.wav"
+    assert mime == "audio/wav"
+    assert data[:4] == b"RIFF"
+
+
+def test_make_transcriber_builds_openai():
+    with patch("companion.transcriber.OpenAI"):
+        transcriber = make_transcriber("openai")
+    assert isinstance(transcriber, OpenAITranscriber)
