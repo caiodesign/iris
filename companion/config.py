@@ -1,4 +1,4 @@
-WAKE_PHRASE = ["hey chat", "hey, shit", "hey, such", "hey shit", "hey such"]
+WAKE_PHRASE = ["hey chat", "hey, shit", "hey, such", "hey shit", "hey such", "hey, shut."]
 CANCEL_PHRASE = "cancel that"
 STOP_PHRASE = "bye bye"
 
