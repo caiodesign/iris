@@ -33,11 +33,15 @@ class SessionManager:
 
     def __init__(self):
         self.loop = None  # captured by the lifespan at startup
-        self.sockets = []
+        self.sockets = set()
         self.history = deque(maxlen=1000)
         self.state = "idle"
         self.thread = None
         self.stop_event = threading.Event()
+        # Guards history: the session thread appends via emit() while
+        # connecting pages snapshot it. snapshot+register are atomic so an
+        # event is either in the snapshot or broadcast live, never both.
+        self._lock = threading.Lock()
 
     @property
     def running(self) -> bool:
@@ -50,7 +54,8 @@ class SessionManager:
         if brain not in session.PROVIDER_NAMES or ears not in session.STT_NAMES:
             self.emit({"event": "error", "text": f"Unknown option: {brain}/{ears}."})
             return
-        self.history.clear()
+        with self._lock:
+            self.history.clear()
         self.stop_event.clear()
         self.thread = threading.Thread(
             target=self._run, args=(brain, ears, bool(ptt)), daemon=True
@@ -70,9 +75,21 @@ class SessionManager:
     def emit(self, event) -> None:
         if event["event"] == "status":
             self.state = event["state"]
-        self.history.append(event)
+        with self._lock:
+            self.history.append(event)
         if self.loop is not None:
             asyncio.run_coroutine_threadsafe(self._broadcast(event), self.loop)
+
+    def snapshot_and_register(self, ws) -> list:
+        """Atomically copy the history and register a socket for live events.
+
+        Done under the lock so a concurrent emit() lands either in the
+        returned snapshot or in a later broadcast — never both (duplicate)
+        and never mid-iteration (RuntimeError)."""
+        with self._lock:
+            snapshot = list(self.history)
+            self.sockets.add(ws)
+            return snapshot
 
     async def _broadcast(self, event) -> None:
         for ws in list(self.sockets):
@@ -80,8 +97,7 @@ class SessionManager:
                 await ws.send_json(event)
             except Exception:
                 # A socket that died mid-send; drop it, the page reconnects.
-                if ws in self.sockets:
-                    self.sockets.remove(ws)
+                self.sockets.discard(ws)
 
 
 manager = SessionManager()
@@ -122,13 +138,13 @@ def get_memory():
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):
     await ws.accept()
-    manager.sockets.append(ws)
-    await ws.send_json(
-        {"event": "hello", "running": manager.running, "state": manager.state}
-    )
-    for event in list(manager.history):
-        await ws.send_json(event)
+    snapshot = manager.snapshot_and_register(ws)
     try:
+        await ws.send_json(
+            {"event": "hello", "running": manager.running, "state": manager.state}
+        )
+        for event in snapshot:
+            await ws.send_json(event)
         while True:
             msg = await ws.receive_json()
             if msg.get("cmd") == "start":
@@ -138,8 +154,7 @@ async def ws_endpoint(ws: WebSocket):
     except WebSocketDisconnect:
         pass
     finally:
-        if ws in manager.sockets:
-            manager.sockets.remove(ws)
+        manager.sockets.discard(ws)
 
 
 # Mounted last so /api and /ws win the route match.

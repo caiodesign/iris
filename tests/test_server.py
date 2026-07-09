@@ -1,9 +1,39 @@
 # tests/test_server.py
+import threading
 import time
 
 from fastapi.testclient import TestClient
 
 from companion import config, server
+
+
+def test_snapshot_and_register_is_atomic_with_emit():
+    # emit() runs on the session thread while pages connect on the event
+    # loop; snapshot+register must happen under one lock so the history
+    # snapshot never races a concurrent append (RuntimeError) and no event
+    # can be both in the snapshot and re-broadcast live to the new socket.
+    manager = server.SessionManager()  # loop stays None: no broadcasts
+    fake_ws = object()
+    stop = threading.Event()
+
+    def hammer():
+        i = 0
+        while not stop.is_set():
+            manager.emit({"event": "system", "text": str(i)})
+            i += 1
+
+    t = threading.Thread(target=hammer, daemon=True)
+    t.start()
+    try:
+        for _ in range(300):
+            snapshot = manager.snapshot_and_register(fake_ws)
+            assert fake_ws in manager.sockets
+            nums = [int(e["text"]) for e in snapshot]
+            assert nums == sorted(set(nums))  # ordered, no duplicates
+            manager.sockets.discard(fake_ws)
+    finally:
+        stop.set()
+        t.join(timeout=2)
 
 
 def fake_run_session(brain, ears, ptt, emit, should_stop):
