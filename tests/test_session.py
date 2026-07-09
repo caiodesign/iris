@@ -234,3 +234,104 @@ def test_remember_session_keeps_timeline_when_durable_fails():
     session.remember_session(llm, memory, events.append)
     memory.append_timeline.assert_called_once_with("- entry")
     memory.write_durable.assert_not_called()
+
+
+import os
+
+import pytest
+
+
+def test_preflight_reports_unreachable_ollama(monkeypatch):
+    def boom():
+        raise ConnectionError("connection refused")
+
+    monkeypatch.setattr(session.ollama, "list", boom)
+    error = session.preflight_error("local", "local")
+    assert error is not None
+    assert "Ollama" in error
+
+
+def test_preflight_reports_missing_api_key(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    error = session.preflight_error("claude", "local")
+    assert error is not None
+    assert "ANTHROPIC_API_KEY" in error
+
+
+def test_preflight_reports_missing_openai_key_for_cloud_ears(monkeypatch):
+    monkeypatch.setattr(session.ollama, "list", lambda: None)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    error = session.preflight_error("local", "openai")
+    assert error is not None
+    assert "OPENAI_API_KEY" in error
+
+
+def test_preflight_reports_missing_tts_files(monkeypatch):
+    monkeypatch.setattr(session.ollama, "list", lambda: None)
+
+    class OkStream:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr(session.sd, "InputStream", lambda **kwargs: OkStream())
+    monkeypatch.setattr(config, "KOKORO_MODEL_PATH", "does-not-exist.onnx")
+    error = session.preflight_error("local", "local")
+    assert error is not None
+    assert "Kokoro" in error
+
+
+def test_run_session_emits_error_and_returns_false_on_preflight_failure(
+    monkeypatch,
+):
+    events = []
+    monkeypatch.setattr(session, "preflight_error", lambda b, e: "Ollama is down")
+    ok = session.run_session("local", "local", False, events.append, lambda: True)
+    assert ok is False
+    assert events == [{"event": "error", "text": "Ollama is down"}]
+
+
+def test_run_session_emits_error_when_a_component_fails_to_load(monkeypatch):
+    events = []
+    monkeypatch.setattr(session, "preflight_error", lambda b, e: None)
+
+    def bad_capture(ptt):
+        raise RuntimeError("Could not bind PTT key")
+
+    monkeypatch.setattr(session, "build_capture", bad_capture)
+    ok = session.run_session("claude", "local", True, events.append, lambda: True)
+    assert ok is False
+    assert events[-1] == {"event": "error", "text": "Could not bind PTT key"}
+    # It got as far as loading before failing.
+    assert {"event": "status", "state": "loading"} in events
+
+
+def test_run_session_happy_path_runs_loop_and_closes_capture(monkeypatch):
+    events = []
+    closed = {"done": False}
+
+    class DummyCapture:
+        def close(self):
+            closed["done"] = True
+
+    monkeypatch.setattr(session, "preflight_error", lambda b, e: None)
+    monkeypatch.setattr(session, "build_capture", lambda ptt: DummyCapture())
+    monkeypatch.setattr(session, "load_transcriber", lambda ears: object())
+    monkeypatch.setattr(session, "make_provider", lambda brain: object())
+    monkeypatch.setattr(
+        session, "Speaker", lambda *args: FakeSpeaker()
+    )
+    loop_ran = {"done": False}
+
+    def fake_loop(capture, transcriber, llm, memory, speaker, machine, emit, should_stop):
+        loop_ran["done"] = True
+
+    monkeypatch.setattr(session, "run_loop", fake_loop)
+    ok = session.run_session("local", "local", False, events.append, lambda: True)
+    assert ok is True
+    assert loop_ran["done"] is True
+    assert closed["done"] is True
+    ready_lines = [e["text"] for e in events if e["event"] == "system"]
+    assert any(t.startswith("Ready.") for t in ready_lines)
