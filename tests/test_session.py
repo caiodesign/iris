@@ -236,11 +236,6 @@ def test_remember_session_keeps_timeline_when_durable_fails():
     memory.write_durable.assert_not_called()
 
 
-import os
-
-import pytest
-
-
 def test_preflight_reports_unreachable_ollama(monkeypatch):
     def boom():
         raise ConnectionError("connection refused")
@@ -335,3 +330,28 @@ def test_run_session_happy_path_runs_loop_and_closes_capture(monkeypatch):
     assert closed["done"] is True
     ready_lines = [e["text"] for e in events if e["event"] == "system"]
     assert any(t.startswith("Ready.") for t in ready_lines)
+
+
+def test_run_session_emits_error_when_loop_raises(monkeypatch):
+    events = []
+    closed = {"done": False}
+
+    class DummyCapture:
+        def close(self):
+            closed["done"] = True
+
+    monkeypatch.setattr(session, "preflight_error", lambda b, e: None)
+    monkeypatch.setattr(session, "build_capture", lambda ptt: DummyCapture())
+    monkeypatch.setattr(session, "load_transcriber", lambda ears: object())
+    monkeypatch.setattr(session, "make_provider", lambda brain: object())
+    monkeypatch.setattr(session, "Speaker", lambda *args: FakeSpeaker())
+
+    def exploding_loop(*args, **kwargs):
+        raise RuntimeError("mic exploded")
+
+    monkeypatch.setattr(session, "run_loop", exploding_loop)
+    ok = session.run_session("local", "local", False, events.append, lambda: True)
+    assert ok is False
+    errors = [e["text"] for e in events if e["event"] == "error"]
+    assert any("mic exploded" in t for t in errors)
+    assert closed["done"] is True

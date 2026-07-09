@@ -172,6 +172,13 @@ def run_session(brain, ears, ptt, emit, should_stop) -> bool:
             emit,
             should_stop,
         )
+    except KeyboardInterrupt:
+        raise
+    except Exception as exc:
+        # A mid-session failure (e.g. the mic unplugged under capture) must
+        # surface as an error event, not a crash of the caller.
+        emit({"event": "error", "text": str(exc)})
+        return False
     finally:
         _close_capture(capture)
     return True
