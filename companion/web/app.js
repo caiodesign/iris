@@ -69,11 +69,12 @@ function showError(text) {
 function handleEvent(ev) {
   switch (ev.event) {
     case "hello":
-      setRunning(ev.running);
       setStatus(ev.state);
+      setRunning(ev.state !== "idle");
       break;
     case "status":
       setStatus(ev.state);
+      setRunning(ev.state !== "idle");
       break;
     case "heard":
       addBubble("user", ev.text);
@@ -119,7 +120,9 @@ btn.addEventListener("click", () => {
   if (running) {
     ws.send(JSON.stringify({ cmd: "stop" }));
   } else {
-    setRunning(true); // session_ended always unlocks, even on start failure
+    // Don't lock optimistically: a rejected start (already running, unknown
+    // option) emits only an error event, never session_ended. The UI locks
+    // when the first non-idle status event arrives.
     ws.send(JSON.stringify({
       cmd: "start",
       brain: brainSel.value,
