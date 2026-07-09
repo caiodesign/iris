@@ -1,12 +1,12 @@
 # tests/test_main.py
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from companion.main import (
     PROVIDER_NAMES,
     STT_NAMES,
     ask_yes_no,
     choose_from_menu,
-    remember_session,
+    print_event,
 )
 
 
@@ -47,59 +47,6 @@ def test_ears_cli_flag_skips_menu():
     mock_input.assert_not_called()
 
 
-def test_remember_session_appends_timeline_and_merges_durable():
-    llm = MagicMock()
-    llm.has_user_turns.return_value = True
-    # First summarize call -> timeline entry, second -> merged durable memory.
-    llm.summarize.side_effect = ["- Talked about food.", "## Facts\n- Likes ramen."]
-    memory = MagicMock()
-    memory.load_durable.return_value = "## Facts\n- Old fact."
-
-    remember_session(llm, memory)
-
-    assert llm.summarize.call_count == 2
-    memory.append_timeline.assert_called_once_with("- Talked about food.")
-    memory.write_durable.assert_called_once_with("## Facts\n- Likes ramen.")
-
-
-def test_remember_session_does_nothing_without_user_turns():
-    llm = MagicMock()
-    llm.has_user_turns.return_value = False
-    memory = MagicMock()
-
-    remember_session(llm, memory)
-
-    llm.summarize.assert_not_called()
-    memory.append_timeline.assert_not_called()
-    memory.write_durable.assert_not_called()
-
-
-def test_remember_session_still_merges_durable_when_timeline_call_fails():
-    llm = MagicMock()
-    llm.has_user_turns.return_value = True
-    llm.summarize.side_effect = [Exception("network blip"), "## Facts\n- Likes ramen."]
-    memory = MagicMock()
-    memory.load_durable.return_value = ""
-
-    remember_session(llm, memory)  # must not raise
-
-    memory.append_timeline.assert_not_called()
-    memory.write_durable.assert_called_once_with("## Facts\n- Likes ramen.")
-
-
-def test_remember_session_keeps_timeline_when_durable_call_fails():
-    llm = MagicMock()
-    llm.has_user_turns.return_value = True
-    llm.summarize.side_effect = ["- Talked about food.", Exception("network blip")]
-    memory = MagicMock()
-    memory.load_durable.return_value = ""
-
-    remember_session(llm, memory)  # must not raise
-
-    memory.append_timeline.assert_called_once_with("- Talked about food.")
-    memory.write_durable.assert_not_called()
-
-
 def test_ask_yes_no_cli_flag_skips_prompt():
     with patch("builtins.input") as mock_input:
         assert ask_yes_no("Push-to-talk?", False, True) is True
@@ -120,3 +67,20 @@ def test_ask_yes_no_accepts_yes_variants():
 def test_ask_yes_no_treats_other_input_as_no():
     with patch("builtins.input", return_value="maybe"):
         assert ask_yes_no("Push-to-talk?", False, False) is False
+
+
+def test_print_event_formats_each_kind(capsys):
+    print_event({"event": "heard", "text": "hi"})
+    print_event({"event": "reply", "text": "hello"})
+    print_event({"event": "system", "text": "Waking up."})
+    print_event({"event": "warning", "text": "oops"})
+    print_event({"event": "error", "text": "bad"})
+    print_event({"event": "status", "state": "listening"})  # silent
+    print_event({"event": "session_ended"})  # silent
+    out = capsys.readouterr().out
+    assert "Heard: hi" in out
+    assert "Companion: hello" in out
+    assert "Waking up." in out
+    assert "WARNING: oops" in out
+    assert "ERROR: bad" in out
+    assert "listening" not in out
