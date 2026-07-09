@@ -10,8 +10,10 @@ from companion import config, server
 def test_snapshot_and_register_is_atomic_with_emit():
     # emit() runs on the session thread while pages connect on the event
     # loop; snapshot+register must happen under one lock so the history
-    # snapshot never races a concurrent append (RuntimeError) and no event
-    # can be both in the snapshot and re-broadcast live to the new socket.
+    # snapshot never races a concurrent append (no RuntimeError, snapshot
+    # always ordered and duplicate-free under contention). The no-duplicate
+    # -delivery guarantee itself is covered by
+    # test_emit_captures_recipients_at_append_time.
     manager = server.SessionManager()  # loop stays None: no broadcasts
     fake_ws = object()
     stop = threading.Event()
@@ -34,6 +36,35 @@ def test_snapshot_and_register_is_atomic_with_emit():
     finally:
         stop.set()
         t.join(timeout=2)
+
+
+def test_emit_captures_recipients_at_append_time(monkeypatch):
+    # The duplicate-delivery guard: the recipient list for a broadcast must
+    # be captured in the same locked section as the history append. An event
+    # emitted before snapshot_and_register(ws) is snapshot-only (ws not a
+    # recipient); one emitted after is live-only (ws is a recipient) — an
+    # event can never reach the same socket both ways, even though the
+    # scheduled broadcast coroutine runs later on the loop.
+    manager = server.SessionManager()
+    manager.loop = object()  # non-None so emit schedules; scheduling stubbed
+    calls = []
+
+    def fake_broadcast(event, recipients):
+        calls.append((event, list(recipients)))
+
+    monkeypatch.setattr(manager, "_broadcast", fake_broadcast)
+    monkeypatch.setattr(
+        server.asyncio, "run_coroutine_threadsafe", lambda coro, loop: None
+    )
+
+    ws = object()
+    manager.emit({"event": "system", "text": "before"})
+    manager.snapshot_and_register(ws)
+    manager.emit({"event": "system", "text": "after"})
+
+    (event1, recipients1), (event2, recipients2) = calls
+    assert event1["text"] == "before" and ws not in recipients1
+    assert event2["text"] == "after" and ws in recipients2
 
 
 def fake_run_session(brain, ears, ptt, emit, should_stop):

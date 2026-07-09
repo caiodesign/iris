@@ -77,22 +77,29 @@ class SessionManager:
             self.state = event["state"]
         with self._lock:
             self.history.append(event)
+            # Recipients are captured with the append: a socket registered
+            # after this point gets the event from its snapshot instead, so
+            # it can never receive the same event twice.
+            recipients = list(self.sockets)
         if self.loop is not None:
-            asyncio.run_coroutine_threadsafe(self._broadcast(event), self.loop)
+            asyncio.run_coroutine_threadsafe(
+                self._broadcast(event, recipients), self.loop
+            )
 
     def snapshot_and_register(self, ws) -> list:
         """Atomically copy the history and register a socket for live events.
 
-        Done under the lock so a concurrent emit() lands either in the
-        returned snapshot or in a later broadcast — never both (duplicate)
-        and never mid-iteration (RuntimeError)."""
+        Done under the same lock as emit()'s append+recipient capture, so a
+        concurrent event lands either in the returned snapshot or in a
+        broadcast to this socket — never both (duplicate) and never
+        mid-iteration (RuntimeError)."""
         with self._lock:
             snapshot = list(self.history)
             self.sockets.add(ws)
             return snapshot
 
-    async def _broadcast(self, event) -> None:
-        for ws in list(self.sockets):
+    async def _broadcast(self, event, recipients) -> None:
+        for ws in recipients:
             try:
                 await ws.send_json(event)
             except Exception:
