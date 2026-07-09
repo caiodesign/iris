@@ -35,6 +35,20 @@ session.
    python -m companion.main
    ```
 
+## Web interface
+
+Instead of the terminal prompts, you can run the companion with a browser UI:
+
+    python -m companion.server
+
+Your browser opens http://localhost:8000 (localhost only). Pick the brain,
+ears, and push-to-talk in the sidebar and click Start — the conversation
+shows up as chat bubbles with a live status pill (listening / thinking /
+speaking), and the sidebar shows what the companion remembers about you.
+You still talk entirely by voice; End session (or saying "bye bye") saves
+memory exactly like the terminal version. `python -m companion.main` keeps
+working if you prefer the terminal.
+
 ## Cloud brains (optional)
 
 By default the companion thinks with the free local llama model. You can
