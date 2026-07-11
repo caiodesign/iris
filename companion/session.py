@@ -198,21 +198,25 @@ def _speak(speaker, text, emit) -> None:
         )
 
 
-def remember_session(llm, memory, emit) -> None:
+def remember_session(llm, memory, emit) -> bool:
     if not llm.has_user_turns():
-        return
+        return True
     emit({"event": "system", "text": "Remembering this session..."})
     # Two independent side-channel calls: a failure in one must not skip the
     # other, and neither may crash the goodbye (mirrors the send/tts guards).
+    ok = True
     try:
         memory.append_timeline(llm.summarize(config.TIMELINE_PROMPT))
     except Exception as exc:
         emit({"event": "warning", "text": f"Could not update timeline memory ({exc})."})
+        ok = False
     try:
         merged = llm.summarize(config.DURABLE_MERGE_PROMPT + memory.load_durable())
         memory.write_durable(merged)
     except Exception as exc:
         emit({"event": "warning", "text": f"Could not update durable memory ({exc})."})
+        ok = False
+    return ok
 
 
 def run_loop(capture, transcriber, llm, memory, speaker, machine, emit, should_stop) -> None:

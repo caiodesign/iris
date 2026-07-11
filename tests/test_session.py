@@ -112,7 +112,7 @@ def states_of(events):
 
 
 def test_wake_greets_with_seeded_history_and_memory():
-    events, llm, speaker, memory = run_scripted(["hey chat"])
+    events, llm, speaker, memory = run_scripted(["hey iris"])
     assert "Waking up." in texts_of(events, "system")
     assert texts_of(events, "reply") == [config.GREETING]
     # The script ending counts as a stop while awake, so "Bye for now!"
@@ -131,7 +131,7 @@ def test_ignored_speech_while_asleep_emits_nothing():
 
 
 def test_forward_emits_heard_and_reply_and_speaks():
-    events, llm, speaker, _ = run_scripted(["hey chat", "I like ramen"])
+    events, llm, speaker, _ = run_scripted(["hey iris", "I like ramen"])
     assert texts_of(events, "heard") == ["I like ramen"]
     assert "Nice!" in texts_of(events, "reply")
     assert "Nice!" in speaker.spoken
@@ -139,7 +139,7 @@ def test_forward_emits_heard_and_reply_and_speaks():
 
 
 def test_status_cycles_listening_thinking_speaking():
-    events, _, _, _ = run_scripted(["hey chat", "I like ramen"])
+    events, _, _, _ = run_scripted(["hey iris", "I like ramen"])
     states = states_of(events)
     assert states[0] == "listening"
     assert "thinking" in states
@@ -147,14 +147,14 @@ def test_status_cycles_listening_thinking_speaking():
 
 
 def test_cancel_discards_without_sending():
-    events, llm, _, _ = run_scripted(["hey chat", "cancel that"])
+    events, llm, _, _ = run_scripted(["hey iris", "cancel that"])
     assert "Discarded that." in texts_of(events, "system")
     assert llm.sent == []
 
 
 def test_sleep_says_goodbye_and_remembers():
     events, llm, speaker, memory = run_scripted(
-        ["hey chat", "I like ramen", "bye bye"]
+        ["hey iris", "I like ramen", "bye bye"]
     )
     assert "Going back to sleep." in texts_of(events, "system")
     assert "Bye for now!" in speaker.spoken
@@ -164,21 +164,21 @@ def test_sleep_says_goodbye_and_remembers():
 
 def test_stop_while_awake_runs_the_goodbye_path():
     # The script ends (End button) while the machine is still ACTIVE.
-    events, llm, speaker, memory = run_scripted(["hey chat", "I like ramen"])
+    events, llm, speaker, memory = run_scripted(["hey iris", "I like ramen"])
     assert speaker.spoken[-1] == "Bye for now!"
     memory.append_timeline.assert_called_once()
     memory.write_durable.assert_called_once()
 
 
 def test_stop_while_asleep_skips_the_goodbye():
-    events, llm, speaker, memory = run_scripted(["hey chat", "bye bye"])
+    events, llm, speaker, memory = run_scripted(["hey iris", "bye bye"])
     # One goodbye from the stop phrase, no second one at loop exit.
     assert speaker.spoken.count("Bye for now!") == 1
 
 
 def test_transcription_failure_warns_and_continues():
     events, llm, speaker, _ = run_scripted(
-        [RuntimeError("boom"), "hey chat"]
+        [RuntimeError("boom"), "hey iris"]
     )
     warnings = texts_of(events, "warning")
     assert any("Transcription failed" in w for w in warnings)
@@ -187,7 +187,7 @@ def test_transcription_failure_warns_and_continues():
 
 def test_llm_failure_warns_and_speaks_recovery_line():
     llm = FakeLLM(reply=RuntimeError("api down"))
-    events, llm, speaker, _ = run_scripted(["hey chat", "hello there"], llm=llm)
+    events, llm, speaker, _ = run_scripted(["hey iris", "hello there"], llm=llm)
     warnings = texts_of(events, "warning")
     assert any("brain failed to reply" in w for w in warnings)
     assert "Sorry, I had trouble thinking. Say that again?" in speaker.spoken
@@ -195,7 +195,7 @@ def test_llm_failure_warns_and_speaks_recovery_line():
 
 def test_tts_failure_warns_and_continues():
     speaker = FakeSpeaker(fail=True)
-    events, _, _, _ = run_scripted(["hey chat"], speaker=speaker)
+    events, _, _, _ = run_scripted(["hey iris"], speaker=speaker)
     warnings = texts_of(events, "warning")
     assert any("Text-to-speech playback failed" in w for w in warnings)
 
@@ -234,6 +234,40 @@ def test_remember_session_keeps_timeline_when_durable_fails():
     session.remember_session(llm, memory, events.append)
     memory.append_timeline.assert_called_once_with("- entry")
     memory.write_durable.assert_not_called()
+
+
+def test_remember_session_returns_true_on_success():
+    llm = MagicMock()
+    llm.has_user_turns.return_value = True
+    llm.summarize.side_effect = ["- entry", "## Facts\n- x"]
+    memory = MagicMock()
+    memory.load_durable.return_value = ""
+    assert session.remember_session(llm, memory, lambda e: None) is True
+
+
+def test_remember_session_returns_true_without_user_turns():
+    llm = MagicMock()
+    llm.has_user_turns.return_value = False
+    memory = MagicMock()
+    assert session.remember_session(llm, memory, lambda e: None) is True
+
+
+def test_remember_session_returns_false_when_timeline_fails():
+    llm = MagicMock()
+    llm.has_user_turns.return_value = True
+    llm.summarize.side_effect = [Exception("blip"), "## Facts\n- x"]
+    memory = MagicMock()
+    memory.load_durable.return_value = ""
+    assert session.remember_session(llm, memory, lambda e: None) is False
+
+
+def test_remember_session_returns_false_when_durable_fails():
+    llm = MagicMock()
+    llm.has_user_turns.return_value = True
+    llm.summarize.side_effect = ["- entry", Exception("blip")]
+    memory = MagicMock()
+    memory.load_durable.return_value = ""
+    assert session.remember_session(llm, memory, lambda e: None) is False
 
 
 def test_preflight_reports_unreachable_ollama(monkeypatch):

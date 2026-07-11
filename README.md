@@ -1,6 +1,6 @@
-# English Voice Companion
+# Iris — English Voice Companion
 
-Local, voice-controlled English practice companion. Say "Hey Chat" to start
+Local, voice-controlled English practice companion. Say "Hey Iris" to start
 talking, "Cancel That" to retract what you just said, "Bye Bye" to end the
 session.
 
@@ -37,17 +37,18 @@ session.
 
 ## Web interface
 
-Instead of the terminal prompts, you can run the companion with a browser UI:
+Instead of the terminal prompts, you can run Iris with a browser UI:
 
     python -m companion.server
 
 Your browser opens http://localhost:8000 (localhost only). Pick the brain,
-ears, and push-to-talk in the sidebar and click Start — the conversation
-shows up as chat bubbles with a live status pill (listening / thinking /
-speaking), and the sidebar shows what the companion remembers about you.
-You still talk entirely by voice; End session (or saying "bye bye") saves
-memory exactly like the terminal version. `python -m companion.main` keeps
-working if you prefer the terminal.
+ears, and push-to-talk under the orb and press the light to start — the orb
+glows aqua while Iris listens, violet while she thinks, and amber while she
+speaks, and the conversation appears as a live transcript below. The Memory
+button (top right) shows what Iris remembers about you. You still talk
+entirely by voice; pressing the light again (or saying "bye bye") ends the
+session and saves memory exactly like the terminal version.
+`python -m companion.main` keeps working if you prefer the terminal.
 
 ## Cloud brains (optional)
 
@@ -107,7 +108,7 @@ record)? [y/N]`, or pass `--ptt` to skip the prompt:
 python -m companion.main --ptt
 ```
 
-The wake word still applies: hold the button and say "Hey chat" to start, hold
+The wake word still applies: hold the button and say "Hey Iris" to start, hold
 and speak to talk, hold and say "bye bye" to end the session.
 
 **Choosing the button.** `PTT_KEY` in `companion/config.py` names the trigger.

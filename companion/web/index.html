@@ -3,41 +3,73 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Companion</title>
+  <title>Iris</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Instrument+Sans:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
-  <aside class="sidebar">
-    <h1>Companion</h1>
-    <section class="card">
-      <h2>Session</h2>
-      <label for="brain">Brain</label>
-      <select id="brain"></select>
-      <label for="ears">Ears</label>
-      <select id="ears"></select>
-      <label class="toggle">
-        <input type="checkbox" id="ptt">
-        <span>Push-to-talk</span>
-      </label>
-      <button id="session-btn">Start</button>
-    </section>
-    <section class="card">
-      <h2>Memory</h2>
-      <div class="tabs">
-        <button class="tab active" data-tab="durable">About you</button>
-        <button class="tab" data-tab="timeline">Timeline</button>
-      </div>
-      <div id="memory-content" class="memory-content"></div>
-    </section>
-  </aside>
-  <main class="main">
-    <header class="topbar">
-      <span id="status-pill" class="pill idle">Idle</span>
+<body data-state="idle">
+  <div class="aurora" aria-hidden="true"></div>
+
+  <header class="bar">
+    <span class="wordmark">iris</span>
+    <div class="bar-right">
       <span id="conn" class="conn"></span>
-    </header>
-    <div id="error-banner" class="banner hidden"></div>
-    <div id="chat" class="chat"></div>
+      <button id="memory-btn" class="ghost-btn" aria-controls="drawer" aria-expanded="false">Memory</button>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="stage">
+      <button id="orb" class="orb" aria-label="Start session">
+        <span class="ring r1" aria-hidden="true"></span>
+        <span class="ring r2" aria-hidden="true"></span>
+        <span class="ring r3" aria-hidden="true"></span>
+        <span class="orb-halo" aria-hidden="true"></span>
+        <span class="orb-core" aria-hidden="true"></span>
+      </button>
+      <p class="readout"><span class="readout-dot" aria-hidden="true"></span><span id="status-text">idle</span></p>
+      <p id="hint" class="hint">press the light to start talking</p>
+
+      <div class="console" id="console">
+        <label class="field">
+          <span class="field-label">brain</span>
+          <select id="brain"></select>
+        </label>
+        <label class="field">
+          <span class="field-label">ears</span>
+          <select id="ears"></select>
+        </label>
+        <label class="field check">
+          <span class="field-label">push-to-talk</span>
+          <input type="checkbox" id="ptt">
+          <span class="switch" aria-hidden="true"></span>
+        </label>
+      </div>
+    </section>
+
+    <section id="chat" class="script" aria-live="polite"></section>
   </main>
+
+  <div id="scrim" class="scrim" hidden></div>
+  <aside id="drawer" class="drawer" aria-label="Memory">
+    <header class="drawer-head">
+      <h2>What I remember</h2>
+      <button id="drawer-close" class="ghost-btn" aria-label="Close memory panel">&#10005;</button>
+    </header>
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-tab="durable" role="tab">About you</button>
+      <button class="tab" data-tab="timeline" role="tab">Timeline</button>
+    </div>
+    <div id="memory-content" class="memory-content"></div>
+  </aside>
+
+  <div id="toast" class="toast" hidden>
+    <span id="toast-text"></span>
+    <button id="toast-close" class="ghost-btn" aria-label="Dismiss error">&#10005;</button>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

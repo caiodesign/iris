@@ -79,7 +79,7 @@ def test_print_event_formats_each_kind(capsys):
     print_event({"event": "session_ended"})  # silent
     out = capsys.readouterr().out
     assert "Heard: hi" in out
-    assert "Companion: hello" in out
+    assert "Iris: hello" in out
     assert "Waking up." in out
     assert "WARNING: oops" in out
     assert "ERROR: bad" in out

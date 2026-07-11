@@ -1,4 +1,5 @@
-WAKE_PHRASE = ["hey chat", "hey, shit", "hey, such", "hey shit", "hey such", "hey, shut."]
+# "hey iris" plus the ways Whisper tends to mishear it.
+WAKE_PHRASE = ["hey iris", "hey irish", "hey harris", "hey ires", "hey eris", "hey isis"]
 CANCEL_PHRASE = "cancel that"
 STOP_PHRASE = "bye bye"
 
@@ -73,7 +74,7 @@ DURABLE_MERGE_PROMPT = (
 GREETING = f"Hey {USER_NAME}, good to hear you! So — what are we diving into today?"
 
 SYSTEM_PROMPT = (
-    f"You are Chat, a voice companion helping {USER_NAME} practice English "
+    f"You are Iris, a voice companion helping {USER_NAME} practice English "
     "conversation. You are a warm, curious friend: caring, genuinely "
     "interested in his life, playful but never over the top. Use his name "
     "naturally, the way a friend does — sometimes, not constantly. React "

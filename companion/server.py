@@ -170,7 +170,7 @@ app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")
 
 def main() -> None:
     load_dotenv()
-    print(f"Companion web interface: {URL}")
+    print(f"Iris web interface: {URL}")
     # uvicorn.run blocks; open the browser shortly after it comes up.
     threading.Timer(1.0, webbrowser.open, args=[URL]).start()
     uvicorn.run(app, host=HOST, port=PORT, log_level="warning")

@@ -88,7 +88,7 @@ def test_serves_the_page():
     with fresh_client() as client:
         res = client.get("/")
     assert res.status_code == 200
-    assert "Companion" in res.text
+    assert "Iris" in res.text
 
 
 def test_memory_endpoint_returns_both_files(tmp_path, monkeypatch):

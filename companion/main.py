@@ -40,7 +40,7 @@ def print_event(event) -> None:
     if kind == "heard":
         print(f"Heard: {event['text']}")
     elif kind == "reply":
-        print(f"Companion: {event['text']}")
+        print(f"Iris: {event['text']}")
     elif kind == "system":
         print(event["text"])
     elif kind == "warning":
@@ -52,7 +52,7 @@ def print_event(event) -> None:
 
 def main() -> None:
     load_dotenv()
-    parser = argparse.ArgumentParser(description="Voice English companion")
+    parser = argparse.ArgumentParser(description="Iris — voice English companion")
     parser.add_argument(
         "--brain",
         choices=PROVIDER_NAMES,
