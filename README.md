@@ -10,6 +10,8 @@ session.
    ```
    ollama pull llama3.1:8b
    ```
+   Skip this step entirely if you only plan to use a cloud brain — see
+   "Running without the local model" below.
 2. Install Python dependencies:
    ```
    pip install -r requirements.txt
@@ -93,6 +95,37 @@ accurately than local Whisper — at a small per-minute cost.
    default `gpt-4o-transcribe`). Change it to `gpt-4o-mini-transcribe` to
    roughly halve the cost. Ballpark at 30 min/day: about $5/month on full
    transcribe, about $2.70/month on mini.
+
+## Running without the local model
+
+Ollama and `llama3.1:8b` (~4.7 GB) are optional. If you always use a cloud
+brain you can skip Setup step 1 and never install them — nothing contacts
+Ollama unless the brain is `local`, so the llama model never enters VRAM.
+
+Add the key you have to `.env` (see "Cloud brains"), then launch with both
+choices set explicitly:
+
+    python -m companion.main --brain claude --ears openai
+
+That runs with no local language model at all. `--brain openai` and
+`--brain zai` work the same way; `--ears local` keeps free local Whisper on
+your GPU (~1 GB) if you would rather not pay per minute for transcription.
+
+Pass `--brain` every time, or make it permanent: the startup menu still
+defaults to `local`, so pressing Enter picks llama. Set
+`LLM_PROVIDER = "claude"` in `companion/config.py` to change what Enter
+does. In the web interface, pick the brain and ears from the dropdowns
+under the orb — the browser remembers your last choice.
+
+Two things stay local no matter which brain you pick:
+
+- **Kokoro TTS** (Setup step 4, ~330 MB) — Iris has no cloud voice option,
+  and startup fails if those two files are missing.
+- **A working microphone.**
+
+Keep `ollama` installed from `requirements.txt` even if you never run the
+local brain: it is a small Python client that the app imports at startup.
+The 4.7 GB model is the part you are skipping, not the package.
 
 ## Push-to-talk
 
